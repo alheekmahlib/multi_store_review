@@ -17,7 +17,10 @@ target_compile_definitions(${PLUGIN_NAME} PRIVATE "_HAS_EXCEPTIONS=1")
 set_target_properties(${PLUGIN_NAME} PROPERTIES
   CXX_VISIBILITY_PRESET hidden)
 target_compile_definitions(${PLUGIN_NAME} PRIVATE FLUTTER_PLUGIN_IMPL)
-target_compile_features(${PLUGIN_NAME} PRIVATE cxx_std_17)
+target_compile_features(${PLUGIN_NAME} PRIVATE cxx_std_20)
+# C++/WinRT picks <coroutine> only when __cpp_lib_coroutine is defined
+# (C++20). Under C++17 it includes <experimental/coroutine>, which the
+# newest MSVC STL turns into a hard STL1011 static assertion.
 target_include_directories(${PLUGIN_NAME}
   PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include"
   INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/include")
