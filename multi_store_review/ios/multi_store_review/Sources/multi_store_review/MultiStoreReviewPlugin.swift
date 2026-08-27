@@ -11,21 +11,31 @@ public class MultiStoreReviewPlugin: NSObject, FlutterPlugin {
     
     public func handle(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
         log("handle", details: call.method)
-        
+
         switch call.method {
         case "requestReview":
-            requestReview(result)
+            let store = call.arguments as? String
+            requestReview(store: store, result: result)
         case "isAvailable":
             isAvailable(result)
+        case "detectStore":
+            detectStore(result)
         case "openStoreListing":
-            openStoreListing(storeId: call.arguments as? String, result: result)
+            let args = call.arguments as? [String: Any]
+            openStoreListing(storeId: args?["appStoreId"] as? String, result: result)
         default:
             log("method not implemented")
             result(FlutterMethodNotImplemented)
         }
     }
-    
-    private func requestReview(_ result: @escaping FlutterResult) {
+
+    private func requestReview(store: String?, result: @escaping FlutterResult) {
+        if let store = store, store != "appleAppStore" {
+            result(FlutterError(code: "unavailable_store",
+                              message: "The requested store (\(store)) is not available on this device",
+                              details: nil))
+            return
+        }
         if #available(iOS 16.0, *) {
             log("iOS 16+")
             if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene {
@@ -59,6 +69,14 @@ public class MultiStoreReviewPlugin: NSObject, FlutterPlugin {
         } else {
             log("unavailable")
             result(false)
+        }
+    }
+
+    private func detectStore(_ result: @escaping FlutterResult) {
+        if #available(iOS 10.3, *) {
+            result("appleAppStore")
+        } else {
+            result("unavailable")
         }
     }
     

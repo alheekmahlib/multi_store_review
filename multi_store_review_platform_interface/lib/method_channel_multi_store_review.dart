@@ -3,13 +3,12 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:platform/platform.dart';
-import 'package:url_launcher/url_launcher_string.dart';
 
 import 'multi_store_review_platform_interface.dart';
 
 /// An implementation of [MultiStoreReviewPlatform] that uses method channels.
 class MethodChannelMultiStoreReview extends MultiStoreReviewPlatform {
-  MethodChannel _channel = MethodChannel('devdox.multi_store_review');
+  MethodChannel _channel = const MethodChannel('devdox.multi_store_review');
   Platform _platform = const LocalPlatform();
 
   @visibleForTesting
@@ -18,48 +17,65 @@ class MethodChannelMultiStoreReview extends MultiStoreReviewPlatform {
   @visibleForTesting
   set platform(Platform platform) => _platform = platform;
 
+  bool get _isSupportedPlatform =>
+      _platform.isAndroid ||
+      _platform.isIOS ||
+      _platform.isMacOS ||
+      _platform.isWindows;
+
+  @override
+  Future<ReviewStore> detectStore() async {
+    _ensureSupportedPlatform();
+    final store = await _channel.invokeMethod<String>('detectStore');
+    return ReviewStore.values.firstWhere(
+      (candidate) => candidate.name == store,
+      orElse: () => ReviewStore.unavailable,
+    );
+  }
+
   @override
   Future<bool> isAvailable() async {
-    if (kIsWeb) return false;
+    if (kIsWeb || !_isSupportedPlatform) return false;
     return _channel
         .invokeMethod<bool>('isAvailable')
         .then((available) => available ?? false, onError: (_) => false);
   }
 
   @override
-  Future<void> requestReview() => _channel.invokeMethod('requestReview');
+  Future<void> requestReview({ReviewStore? store}) async {
+    _ensureSupportedPlatform();
+    await _channel.invokeMethod<void>('requestReview', store?.name);
+  }
 
   @override
   Future<void> openStoreListing({
     String? appStoreId,
     String? microsoftStoreId,
   }) async {
-    final bool isiOS = _platform.isIOS;
-    final bool isMacOS = _platform.isMacOS;
-    final bool isAndroid = _platform.isAndroid;
-    final bool isWindows = _platform.isWindows;
+    _ensureSupportedPlatform();
 
-    if (isiOS || isMacOS) {
-      await _channel.invokeMethod(
-        'openStoreListing',
-        ArgumentError.checkNotNull(appStoreId, 'appStoreId'),
-      );
-    } else if (isAndroid) {
-      await _channel.invokeMethod('openStoreListing');
-    } else if (isWindows) {
-      ArgumentError.checkNotNull(microsoftStoreId, 'microsoftStoreId');
-      await _launchUrl(
-        'ms-windows-store://review/?ProductId=$microsoftStoreId',
-      );
-    } else {
+    final bool isApple = _platform.isIOS || _platform.isMacOS;
+    if (isApple && appStoreId == null) {
+      throw ArgumentError('appStoreId is required on iOS & macOS');
+    }
+    if (_platform.isWindows && microsoftStoreId == null) {
+      throw ArgumentError('microsoftStoreId is required on Windows');
+    }
+
+    await _channel.invokeMethod<void>('openStoreListing', {
+      'appStoreId': appStoreId,
+      'microsoftStoreId': microsoftStoreId,
+    });
+  }
+
+  void _ensureSupportedPlatform() {
+    if (kIsWeb) {
+      throw UnsupportedError('Web is not supported');
+    }
+    if (!_isSupportedPlatform) {
       throw UnsupportedError(
         'Platform(${_platform.operatingSystem}) not supported',
       );
     }
-  }
-
-  Future<void> _launchUrl(String url) async {
-    if (!await canLaunchUrlString(url)) return;
-    await launchUrlString(url, mode: LaunchMode.externalNonBrowserApplication);
   }
 }

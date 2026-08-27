@@ -16,6 +16,15 @@ public class MultiStoreReviewPlugin: NSObject, FlutterPlugin {
     ) {
         switch call.method {
         case "requestReview":
+            let store = call.arguments as? String
+            if let store = store, store != "appleAppStore" {
+                result(
+                    FlutterError(
+                        code: "unavailable_store",
+                        message: "The requested store (\(store)) is not available on this device",
+                        details: nil))
+                return
+            }
             if #available(OSX 13.0, *) {
                 guard let viewController = NSApplication.shared.mainWindow? .contentViewController else {
                     result(
@@ -43,8 +52,22 @@ public class MultiStoreReviewPlugin: NSObject, FlutterPlugin {
             } else {
                 result(false)
             }
+        case "detectStore":
+            if #available(OSX 10.14, *) {
+                result("appleAppStore")
+            } else {
+                result("unavailable")
+            }
         case "openStoreListing":
-            let storeId: String = call.arguments as! String
+            let args = call.arguments as? [String: Any]
+            guard let storeId = args?["appStoreId"] as? String else {
+                result(
+                    FlutterError(
+                        code: "no-store-id",
+                        message: "Your store id must be passed as the method channel's argument",
+                        details: nil))
+                return
+            }
 
             guard
                 let writeReviewURL = URL(

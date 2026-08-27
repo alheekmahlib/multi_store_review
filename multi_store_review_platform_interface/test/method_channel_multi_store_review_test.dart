@@ -1,6 +1,7 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:multi_store_review_platform_interface/method_channel_multi_store_review.dart';
+import 'package:multi_store_review_platform_interface/review_store.dart';
 import 'package:platform/platform.dart';
 
 void main() {
@@ -12,6 +13,9 @@ void main() {
   setUp(() {
     methodChannelMultiStoreReview = MethodChannelMultiStoreReview();
     methodChannelMultiStoreReview.channel = channel;
+    methodChannelMultiStoreReview.platform = FakePlatform(
+      operatingSystem: 'android',
+    );
     log = <MethodCall>[];
   });
 
@@ -23,6 +27,8 @@ void main() {
     log.add(call);
 
     switch (call.method) {
+      case 'detectStore':
+        return 'huaweiAppGallery';
       case 'isAvailable':
         return true;
       case 'requestReview':
@@ -34,108 +40,139 @@ void main() {
     }
   }
 
-  // Converts a nullable type to its non-nullable equivalent (backwards compatibility)
   (<T>(T? o) => o!)(TestDefaultBinaryMessengerBinding.instance)
       .defaultBinaryMessenger
       .setMockMethodCallHandler(channel, mockMethodCallHandler);
 
-  group('isAvailable', () {
+  group('detectStore', () {
     test(
-      'should invoke the isAvailable method channel',
+      'should invoke the detectStore method channel and parse the store',
       () async {
-        // ACT
-        final result = await methodChannelMultiStoreReview.isAvailable();
+        final result = await methodChannelMultiStoreReview.detectStore();
 
-        // ASSERT
-        expect(log, <Matcher>[isMethodCall('isAvailable', arguments: null)]);
-        expect(result, isTrue);
+        expect(log, <Matcher>[isMethodCall('detectStore', arguments: null)]);
+        expect(result, ReviewStore.huaweiAppGallery);
       },
     );
+
+    test('should map an unknown store name to unavailable', () async {
+      Future<Object?> unknownStoreHandler(MethodCall call) async => 'mars';
+
+      (<T>(T? o) => o!)(TestDefaultBinaryMessengerBinding.instance)
+          .defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, unknownStoreHandler);
+
+      final result = await methodChannelMultiStoreReview.detectStore();
+
+      expect(result, ReviewStore.unavailable);
+
+      (<T>(T? o) => o!)(TestDefaultBinaryMessengerBinding.instance)
+          .defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, mockMethodCallHandler);
+    });
+  });
+
+  group('isAvailable', () {
+    test('should invoke the isAvailable method channel', () async {
+      final result = await methodChannelMultiStoreReview.isAvailable();
+
+      expect(log, <Matcher>[isMethodCall('isAvailable', arguments: null)]);
+      expect(result, isTrue);
+    });
+
+    test('should return false when the channel throws', () async {
+      Future<Object?> failingHandler(MethodCall call) async =>
+          throw PlatformException(code: 'unavailable');
+
+      (<T>(T? o) => o!)(TestDefaultBinaryMessengerBinding.instance)
+          .defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, failingHandler);
+
+      final result = await methodChannelMultiStoreReview.isAvailable();
+
+      expect(result, isFalse);
+
+      (<T>(T? o) => o!)(TestDefaultBinaryMessengerBinding.instance)
+          .defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, mockMethodCallHandler);
+    });
   });
 
   group('requestReview', () {
-    test(
-      'should invoke the requestReview method channel',
-      () async {
-        // ACT
-        await methodChannelMultiStoreReview.requestReview();
+    test('should invoke requestReview without arguments by default', () async {
+      await methodChannelMultiStoreReview.requestReview();
 
-        // ASSERT
-        expect(log, <Matcher>[isMethodCall('requestReview', arguments: null)]);
-      },
-    );
+      expect(log, <Matcher>[isMethodCall('requestReview', arguments: null)]);
+    });
+
+    test('should pass the explicit store as the argument', () async {
+      await methodChannelMultiStoreReview.requestReview(
+        store: ReviewStore.huaweiAppGallery,
+      );
+
+      expect(log, <Matcher>[
+        isMethodCall('requestReview', arguments: 'huaweiAppGallery'),
+      ]);
+    });
   });
 
   group('openStoreListing', () {
-    test(
-      'should invoke the openStoreListing method channel on Android',
-      () async {
-        // ARRANGE
-        methodChannelMultiStoreReview.platform =
-            FakePlatform(operatingSystem: 'android');
+    test('should send the store ids as a map of arguments', () async {
+      await methodChannelMultiStoreReview.openStoreListing(
+        appStoreId: 'app_store_id',
+        microsoftStoreId: 'microsoft_store_id',
+      );
 
-        // ACT
-        await methodChannelMultiStoreReview.openStoreListing();
+      expect(log, <Matcher>[
+        isMethodCall(
+          'openStoreListing',
+          arguments: {
+            'appStoreId': 'app_store_id',
+            'microsoftStoreId': 'microsoft_store_id',
+          },
+        ),
+      ]);
+    });
 
-        // ASSERT
-        expect(
-          log,
-          <Matcher>[isMethodCall('openStoreListing', arguments: null)],
-        );
-      },
-    );
-    test(
-      'should invoke the openStoreListing method channel on iOS',
-      () async {
-        // ARRANGE
-        methodChannelMultiStoreReview.platform =
-            FakePlatform(operatingSystem: 'ios');
-        final appStoreId = "store_id";
+    test('should require appStoreId on iOS', () async {
+      methodChannelMultiStoreReview.platform = FakePlatform(
+        operatingSystem: 'ios',
+      );
 
-        // ACT
-        await methodChannelMultiStoreReview.openStoreListing(appStoreId: appStoreId);
+      await expectLater(
+        methodChannelMultiStoreReview.openStoreListing(),
+        throwsArgumentError,
+      );
+    });
 
-        // ASSERT
-        expect(log,
-            <Matcher>[isMethodCall('openStoreListing', arguments: appStoreId)]);
-      },
-    );
-    test(
-      'should invoke the openStoreListing method channel on MacOS',
-      () async {
-        // ARRANGE
-        methodChannelMultiStoreReview.platform =
-            FakePlatform(operatingSystem: 'macos');
-        final appStoreId = "store_id";
+    test('should require microsoftStoreId on Windows', () async {
+      methodChannelMultiStoreReview.platform = FakePlatform(
+        operatingSystem: 'windows',
+      );
 
-        // ACT
-        await methodChannelMultiStoreReview.openStoreListing(appStoreId: appStoreId);
+      await expectLater(
+        methodChannelMultiStoreReview.openStoreListing(),
+        throwsArgumentError,
+      );
+    });
 
-        // ASSERT
-        expect(log,
-            <Matcher>[isMethodCall('openStoreListing', arguments: appStoreId)]);
-      },
-    );
-    test(
-      'should invoke the openStoreListing method channel on Windows',
-      () async {
-        // ARRANGE
-        methodChannelMultiStoreReview.platform =
-            FakePlatform(operatingSystem: 'windows');
-        final microsoftStoreId = 'store_id';
+    test('should throw UnsupportedError on unsupported platforms', () async {
+      methodChannelMultiStoreReview.platform = FakePlatform(
+        operatingSystem: 'linux',
+      );
 
-        // ACT
-        await methodChannelMultiStoreReview.openStoreListing(
-          microsoftStoreId: microsoftStoreId,
-        );
-
-        // ASSERT
-        expect(log, <Matcher>[
-          isMethodCall('openStoreListing', arguments: microsoftStoreId)
-        ]);
-      },
-      skip:
-          'The windows uwp implementation still uses the url_launcher package',
-    );
+      await expectLater(
+        methodChannelMultiStoreReview.openStoreListing(),
+        throwsUnsupportedError,
+      );
+      await expectLater(
+        methodChannelMultiStoreReview.requestReview(),
+        throwsUnsupportedError,
+      );
+      await expectLater(
+        methodChannelMultiStoreReview.detectStore(),
+        throwsUnsupportedError,
+      );
+    });
   });
 }
