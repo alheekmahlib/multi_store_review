@@ -49,6 +49,8 @@ flutter:
         pluginClass: MultiStoreReviewPlugin
       macos:
         pluginClass: MultiStoreReviewPlugin
+      windows:
+        pluginClass: MultiStoreReviewPluginCApi
 
 screenshots:
   - description: A screenshot of the iOS rating pop-up.

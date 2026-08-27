@@ -1,27 +1,110 @@
 package devdox.multi_store_review
 
-//import io.flutter.plugin.common.MethodCall
-//import io.flutter.plugin.common.MethodChannel
-//import kotlin.test.Test
-//import org.mockito.Mockito
-
-/*
- * This demonstrates a simple unit test of the Kotlin portion of this plugin's implementation.
- *
- * Once you have built the plugin's example app, you can run these tests from the command
- * line by running `./gradlew testDebugUnitTest` in the `example/android/` directory, or
- * you can run them directly from IDEs that support JUnit such as Android Studio.
- */
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertNull
 
 internal class MultiStoreReviewPluginTest {
-//  @Test
-//  fun onMethodCall_getPlatformVersion_returnsExpectedValue() {
-//    val plugin = MultiStoreReviewPlugin()
-//
-//    val call = MethodCall("getPlatformVersion", null)
-//    val mockResult: MethodChannel.Result = Mockito.mock(MethodChannel.Result::class.java)
-//    plugin.onMethodCall(call, mockResult)
-//
-//    Mockito.verify(mockResult).success("Android " + android.os.Build.VERSION.RELEASE)
-//  }
+
+    //
+    // StoreLogic.detect
+    //
+
+    @Test
+    fun detect_prefersGooglePlay_whenBothStoresInstalled() {
+        assertEquals(
+            AndroidStore.GOOGLE_PLAY,
+            StoreLogic.detect(playInstalled = true, galleryInstalled = true),
+        )
+    }
+
+    @Test
+    fun detect_returnsAppGallery_onHuaweiOnlyDevices() {
+        assertEquals(
+            AndroidStore.HUAWEI_APP_GALLERY,
+            StoreLogic.detect(playInstalled = false, galleryInstalled = true),
+        )
+    }
+
+    @Test
+    fun detect_returnsUnavailable_whenNoStoreInstalled() {
+        assertEquals(
+            AndroidStore.UNAVAILABLE,
+            StoreLogic.detect(playInstalled = false, galleryInstalled = false),
+        )
+    }
+
+    //
+    // StoreLogic.resolve
+    //
+
+    @Test
+    fun resolve_autoDetects_whenNoStoreRequested() {
+        assertEquals(
+            AndroidStore.HUAWEI_APP_GALLERY,
+            StoreLogic.resolve(null, playInstalled = false, galleryInstalled = true),
+        )
+    }
+
+    @Test
+    fun resolve_honoursExplicitGooglePlayRequest() {
+        assertEquals(
+            AndroidStore.GOOGLE_PLAY,
+            StoreLogic.resolve("googlePlay", playInstalled = true, galleryInstalled = true),
+        )
+    }
+
+    @Test
+    fun resolve_honoursExplicitAppGalleryRequest_evenWithPlayInstalled() {
+        assertEquals(
+            AndroidStore.HUAWEI_APP_GALLERY,
+            StoreLogic.resolve(
+                "huaweiAppGallery",
+                playInstalled = true,
+                galleryInstalled = true,
+            ),
+        )
+    }
+
+    @Test
+    fun resolve_returnsUnavailable_forRequestedStoreNotInstalled() {
+        assertEquals(
+            AndroidStore.UNAVAILABLE,
+            StoreLogic.resolve("googlePlay", playInstalled = false, galleryInstalled = true),
+        )
+    }
+
+    @Test
+    fun resolve_returnsUnavailable_forUnknownStoreName() {
+        assertEquals(
+            AndroidStore.UNAVAILABLE,
+            StoreLogic.resolve("mars", playInstalled = true, galleryInstalled = true),
+        )
+    }
+
+    //
+    // AppGalleryResults.errorFor
+    //
+
+    @Test
+    fun errorFor_mapsEveryDocumentedFailureCode() {
+        val expectedCodes = mapOf(
+            0 to "unknown_error",
+            101 to "not_released",
+            104 to "invalid_huawei_id",
+            105 to "conditions_not_met",
+            106 to "comments_disabled",
+            107 to "service_unsupported",
+        )
+        expectedCodes.forEach { (resultCode, errorCode) ->
+            assertEquals(errorCode, AppGalleryResults.errorFor(resultCode)?.first)
+        }
+    }
+
+    @Test
+    fun errorFor_treatsSubmittedAndCancelledFlowsAsCompleted() {
+        assertNull(AppGalleryResults.errorFor(102))
+        assertNull(AppGalleryResults.errorFor(103))
+        assertNull(AppGalleryResults.errorFor(108))
+    }
 }
