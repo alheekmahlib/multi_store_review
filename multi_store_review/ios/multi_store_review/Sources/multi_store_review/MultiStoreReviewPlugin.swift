@@ -4,7 +4,7 @@ import StoreKit
 
 public class MultiStoreReviewPlugin: NSObject, FlutterPlugin {
     public static func register(with registrar: FlutterPluginRegistrar) {
-        let channel = FlutterMethodChannel(name: "devdox.multi_store_review", binaryMessenger: registrar.messenger())
+        let channel = FlutterMethodChannel(name: "dev.alheekmahlib.multi_store_review", binaryMessenger: registrar.messenger())
         let instance = MultiStoreReviewPlugin()
         registrar.addMethodCallDelegate(instance, channel: channel)
     }

@@ -1,4 +1,4 @@
-package devdox.multi_store_review
+package dev.alheekmahlib.multi_store_review
 
 import android.app.Activity
 import android.content.ActivityNotFoundException
@@ -34,7 +34,7 @@ class MultiStoreReviewPlugin :
     override fun onAttachedToEngine(flutterPluginBinding: FlutterPlugin.FlutterPluginBinding) {
         channel = MethodChannel(
             flutterPluginBinding.binaryMessenger,
-            "devdox.multi_store_review"
+            "dev.alheekmahlib.multi_store_review"
         )
         channel.setMethodCallHandler(this)
         context = flutterPluginBinding.applicationContext

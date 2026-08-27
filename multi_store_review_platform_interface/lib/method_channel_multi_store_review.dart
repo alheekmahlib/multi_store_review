@@ -8,7 +8,7 @@ import 'multi_store_review_platform_interface.dart';
 
 /// An implementation of [MultiStoreReviewPlatform] that uses method channels.
 class MethodChannelMultiStoreReview extends MultiStoreReviewPlatform {
-  MethodChannel _channel = const MethodChannel('devdox.multi_store_review');
+  MethodChannel _channel = const MethodChannel('dev.alheekmahlib.multi_store_review');
   Platform _platform = const LocalPlatform();
 
   @visibleForTesting

@@ -16,7 +16,7 @@ namespace {
 using flutter::EncodableMap;
 using flutter::EncodableValue;
 
-constexpr char kChannelName[] = "devdox.multi_store_review";
+constexpr char kChannelName[] = "dev.alheekmahlib.multi_store_review";
 
 /// The Microsoft Store rate & review API only works for packaged (MSIX)
 /// apps distributed through the store. GetCurrentPackageFullName returns

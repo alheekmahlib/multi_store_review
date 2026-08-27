@@ -1,4 +1,4 @@
-group = "devdox.multi_store_review"
+group = "dev.alheekmahlib.multi_store_review"
 version = "1.0-SNAPSHOT"
 
 buildscript {
@@ -25,7 +25,7 @@ apply plugin: "com.android.library"
 apply plugin: "kotlin-android"
 
 android {
-    namespace = "devdox.multi_store_review"
+    namespace = "dev.alheekmahlib.multi_store_review"
 
     compileSdk = 35
 

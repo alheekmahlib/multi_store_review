@@ -8,7 +8,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   late MethodChannelMultiStoreReview methodChannelMultiStoreReview;
   late List<MethodCall> log = [];
-  const MethodChannel channel = MethodChannel('devdox.multi_store_review');
+  const MethodChannel channel = MethodChannel('dev.alheekmahlib.multi_store_review');
 
   setUp(() {
     methodChannelMultiStoreReview = MethodChannelMultiStoreReview();

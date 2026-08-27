@@ -8,7 +8,7 @@
 PRODUCT_NAME = multi_store_review_example
 
 // The application's bundle identifier
-PRODUCT_BUNDLE_IDENTIFIER = devdox.inAppReviewExample
+PRODUCT_BUNDLE_IDENTIFIER = dev.alheekmahlib.multiStoreReviewExample
 
 // The copyright displayed in application information
-PRODUCT_COPYRIGHT = Copyright © 2025 devdox. All rights reserved.
+PRODUCT_COPYRIGHT = Copyright © 2026 alheekmahlib. All rights reserved.

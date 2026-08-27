@@ -1,4 +1,4 @@
-package devdox.multi_store_review
+package dev.alheekmahlib.multi_store_review
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
