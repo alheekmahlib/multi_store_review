@@ -5,8 +5,9 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
+import android.os.Build
 import android.util.Log
-import androidx.core.net.toUri
 import com.google.android.play.core.review.ReviewManagerFactory
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.embedding.engine.plugins.activity.ActivityAware
@@ -27,8 +28,12 @@ class MultiStoreReviewPlugin :
     private lateinit var channel: MethodChannel
     private var context: Context? = null
     private var activity: Activity? = null
+    private var binding: ActivityPluginBinding? = null
 
-    /// Result of the pending AppGallery review flow, answered in onActivityResult.
+    /**
+     * Result of the pending AppGallery review flow, answered in
+     * [onActivityResult].
+     */
     private var pendingResult: Result? = null
 
     override fun onAttachedToEngine(flutterPluginBinding: FlutterPlugin.FlutterPluginBinding) {
@@ -41,10 +46,9 @@ class MultiStoreReviewPlugin :
     }
 
     override fun onMethodCall(call: MethodCall, result: Result) {
-        Log.i(TAG, "onMethodCall: ${call.method}")
         when (call.method) {
-            "detectStore" -> result.success(detectStore().wireName)
-            "isAvailable" -> result.success(detectStore() != AndroidStore.UNAVAILABLE)
+            "detectStore" ->
+                result.success(detectStore()?.wireName ?: StoreLogic.UNAVAILABLE)
             "requestReview" -> requestReview(call.arguments as? String, result)
             "openStoreListing" -> openStoreListing(result)
             else -> result.notImplemented()
@@ -54,25 +58,42 @@ class MultiStoreReviewPlugin :
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         channel.setMethodCallHandler(null)
         context = null
+        // The engine is gone; there is nobody left to answer the pending
+        // result, so drop the reference instead of leaking it.
+        pendingResult = null
     }
 
     // ActivityAware overrides
 
     override fun onAttachedToActivity(binding: ActivityPluginBinding) {
+        this.binding = binding
         activity = binding.activity
         binding.addActivityResultListener(this)
     }
 
     override fun onDetachedFromActivityForConfigChanges() {
+        // The activity is recreated but the plugin stays registered; the
+        // AppGallery flow result is still delivered after reattachment.
+        binding = null
         activity = null
     }
 
     override fun onReattachedToActivityForConfigChanges(binding: ActivityPluginBinding) {
+        this.binding = binding
         activity = binding.activity
+        binding.addActivityResultListener(this)
     }
 
     override fun onDetachedFromActivity() {
+        binding?.removeActivityResultListener(this)
+        binding = null
         activity = null
+        pendingResult?.error(
+            "error",
+            "The activity was destroyed before the AppGallery review flow finished",
+            null
+        )
+        pendingResult = null
     }
 
     // ActivityResultListener override (AppGallery review flow)
@@ -85,18 +106,19 @@ class MultiStoreReviewPlugin :
 
         AppGalleryResults.errorFor(resultCode)?.let { (code, message) ->
             result.error(code, message, null)
-        } ?: result.success(null)
+        } ?: result.success(AndroidStore.HUAWEI_APP_GALLERY.wireName)
 
         return true
     }
 
     // Store detection
 
-    private fun detectStore(): AndroidStore {
-        val context = this.context ?: return AndroidStore.UNAVAILABLE
+    private fun detectStore(): AndroidStore? {
+        val context = this.context ?: return null
         return StoreLogic.detect(
-            playInstalled = context.isPackageInstalled(PLAY_STORE_PACKAGE),
-            galleryInstalled = context.isPackageInstalled(APP_GALLERY_PACKAGE),
+            playInstalled = context.isPackageInstalled(StoreLogic.PLAY_STORE_PACKAGE),
+            galleryInstalled = context.isPackageInstalled(StoreLogic.APP_GALLERY_PACKAGE),
+            installerPackage = installerPackageName(),
         )
     }
 
@@ -108,22 +130,45 @@ class MultiStoreReviewPlugin :
             false
         }
 
+    /**
+     * The package name of the store the app was installed from, used to
+     * prefer that store when several are installed. Returns null when the
+     * app was sideloaded or the source cannot be determined.
+     */
+    private fun installerPackageName(): String? {
+        val context = this.context ?: return null
+        val manager = context.packageManager
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                val source = manager.getInstallSourceInfo(context.packageName)
+                source.initiatingPackageName ?: source.installingPackageName
+            } else {
+                @Suppress("DEPRECATION")
+                manager.getInstallerPackageName(context.packageName)
+            }
+        } catch (_: PackageManager.NameNotFoundException) {
+            null
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     // Review flows
 
     private fun requestReview(requestedStore: String?, result: Result) {
-        Log.i(TAG, "requestReview: called (store=$requestedStore)")
         if (noContextOrActivity(result)) return
 
         val store = StoreLogic.resolve(
             requested = requestedStore,
-            playInstalled = context!!.isPackageInstalled(PLAY_STORE_PACKAGE),
-            galleryInstalled = context!!.isPackageInstalled(APP_GALLERY_PACKAGE),
+            playInstalled = context!!.isPackageInstalled(StoreLogic.PLAY_STORE_PACKAGE),
+            galleryInstalled = context!!.isPackageInstalled(StoreLogic.APP_GALLERY_PACKAGE),
+            installerPackage = installerPackageName(),
         )
 
         when (store) {
             AndroidStore.GOOGLE_PLAY -> requestPlayReview(result)
             AndroidStore.HUAWEI_APP_GALLERY -> requestAppGalleryReview(result)
-            AndroidStore.UNAVAILABLE -> {
+            null -> {
                 val message = if (requestedStore == null) {
                     "No supported app store is installed on this device"
                 } else {
@@ -141,15 +186,15 @@ class MultiStoreReviewPlugin :
             request.addOnCompleteListener { task ->
                 if (noContextOrActivity(result)) return@addOnCompleteListener
                 if (task.isSuccessful) {
-                    Log.i(TAG, "onComplete: Successfully requested review flow")
                     val info = task.result
                     val flow = manager.launchReviewFlow(activity!!, info)
                     flow.addOnCompleteListener {
-                        // The API does not indicate whether the user reviewed or if the dialog was shown.
-                        result.success(null)
+                        // The API does not indicate whether the user reviewed
+                        // or if the dialog was shown.
+                        result.success(AndroidStore.GOOGLE_PLAY.wireName)
                     }
                 } else {
-                    Log.w(TAG, "onComplete: Unsuccessfully requested review flow")
+                    Log.w(TAG, "requestPlayReview: review flow unavailable")
                     result.error(
                         "error",
                         "In-App Review API unavailable",
@@ -167,13 +212,22 @@ class MultiStoreReviewPlugin :
         }
     }
 
-    /// Shows the AppGallery rating dialog. AppGallery renders the dialog
-    /// itself in response to the guidecomment intent, so no HMS SDK is
-    /// required. Result codes are documented in [AppGalleryResults].
+    /**
+     * Shows the AppGallery rating dialog. AppGallery renders the dialog
+     * itself in response to the guidecomment intent, so no HMS SDK is
+     * required. Result codes are documented in [AppGalleryResults].
+     */
     private fun requestAppGalleryReview(result: Result) {
         try {
             val intent = Intent(GUIDE_COMMENT_ACTION)
-                .setPackage(APP_GALLERY_PACKAGE)
+                .setPackage(StoreLogic.APP_GALLERY_PACKAGE)
+            // Fail a still-pending previous result instead of leaking its
+            // Dart future forever.
+            pendingResult?.error(
+                "error",
+                "A new review request superseded the pending AppGallery flow",
+                null
+            )
             pendingResult = result
             activity!!.startActivityForResult(intent, APP_GALLERY_REQUEST_CODE)
         } catch (e: ActivityNotFoundException) {
@@ -197,7 +251,6 @@ class MultiStoreReviewPlugin :
     // Store listing
 
     private fun openStoreListing(result: Result) {
-        Log.i(TAG, "openStoreListing: called")
         if (noContextOrActivity(result)) return
 
         val packageName = context!!.packageName
@@ -211,14 +264,14 @@ class MultiStoreReviewPlugin :
                 val marketFallback = "market://details?id=$packageName"
                 try {
                     activity!!.startActivity(
-                        Intent(Intent.ACTION_VIEW).setData(deepLink.toUri())
+                        Intent(Intent.ACTION_VIEW).setData(Uri.parse(deepLink))
                     )
                     result.success(null)
                 } catch (_: ActivityNotFoundException) {
                     launch(marketFallback, result)
                 }
             }
-            AndroidStore.UNAVAILABLE -> result.error(
+            null -> result.error(
                 "unavailable_store",
                 "No supported app store is installed on this device",
                 null
@@ -229,7 +282,7 @@ class MultiStoreReviewPlugin :
     private fun launch(url: String, result: Result) {
         try {
             activity!!.startActivity(
-                Intent(Intent.ACTION_VIEW).setData(url.toUri())
+                Intent(Intent.ACTION_VIEW).setData(Uri.parse(url))
             )
             result.success(null)
         } catch (e: ActivityNotFoundException) {
@@ -249,19 +302,13 @@ class MultiStoreReviewPlugin :
     }
 
     private fun noContextOrActivity(result: Result? = null): Boolean {
-        Log.i(TAG, "noContextOrActivity: called")
-
         if (context == null) {
-            val msg = "Android context not available"
-            Log.e(TAG, "noContextOrActivity: $msg")
-            result?.error("error", msg, null)
+            result?.error("error", "Android context not available", null)
             return true
         }
 
         if (activity == null) {
-            val msg = "Android activity not available"
-            Log.e(TAG, "noContextOrActivity: $msg")
-            result?.error("error", msg, null)
+            result?.error("error", "Android activity not available", null)
             return true
         }
 
@@ -271,13 +318,7 @@ class MultiStoreReviewPlugin :
     companion object {
         private const val TAG = "MultiStoreReviewPlugin"
 
-        /// Google Play Store package name.
-        private const val PLAY_STORE_PACKAGE = "com.android.vending"
-
-        /// Huawei AppGallery package name.
-        private const val APP_GALLERY_PACKAGE = "com.huawei.appmarket"
-
-        /// Intent action rendered by AppGallery as the in-app rating dialog.
+        /** Intent action rendered by AppGallery as the in-app rating dialog. */
         private const val GUIDE_COMMENT_ACTION =
             "com.huawei.appmarket.intent.action.guidecomment"
 
@@ -285,55 +326,83 @@ class MultiStoreReviewPlugin :
     }
 }
 
-/// The stores this plugin can route to on Android.
+/** The stores this plugin can route to on Android. */
 internal enum class AndroidStore(val wireName: String) {
     GOOGLE_PLAY("googlePlay"),
     HUAWEI_APP_GALLERY("huaweiAppGallery"),
-    UNAVAILABLE("unavailable"),
 }
 
-/// Pure store-selection logic, kept free of Android dependencies for testing.
+/**
+ * Pure store-selection logic, kept free of Android dependencies for testing.
+ * A null result means no supported store is present on the device.
+ */
 internal object StoreLogic {
 
-    /// Prefers Google Play when both stores are installed.
-    fun detect(playInstalled: Boolean, galleryInstalled: Boolean): AndroidStore =
-        when {
-            playInstalled -> AndroidStore.GOOGLE_PLAY
-            galleryInstalled -> AndroidStore.HUAWEI_APP_GALLERY
-            else -> AndroidStore.UNAVAILABLE
-        }
+    /** Wire name reported when no supported store is present. */
+    const val UNAVAILABLE = "unavailable"
 
-    /// Resolves the store to use for an explicit (non-null) request. The
-    /// caller is responsible for reporting [AndroidStore.UNAVAILABLE] with
-    /// an `unavailable_store` error.
+    /** Google Play Store package name. */
+    const val PLAY_STORE_PACKAGE = "com.android.vending"
+
+    /** Huawei AppGallery package name. */
+    const val APP_GALLERY_PACKAGE = "com.huawei.appmarket"
+
+    /**
+     * Picks the store to use, preferring the store the app was installed
+     * from — on devices with several stores only the installing one has the
+     * app listed for review. Falls back to presence order (Play first).
+     */
+    fun detect(
+        playInstalled: Boolean,
+        galleryInstalled: Boolean,
+        installerPackage: String?,
+    ): AndroidStore? = when {
+        installerPackage == PLAY_STORE_PACKAGE && playInstalled ->
+            AndroidStore.GOOGLE_PLAY
+        installerPackage == APP_GALLERY_PACKAGE && galleryInstalled ->
+            AndroidStore.HUAWEI_APP_GALLERY
+        playInstalled -> AndroidStore.GOOGLE_PLAY
+        galleryInstalled -> AndroidStore.HUAWEI_APP_GALLERY
+        else -> null
+    }
+
+    /**
+     * Resolves the store to use for an explicit (non-null) request. The
+     * caller is responsible for reporting a null result with an
+     * `unavailable_store` error.
+     */
     fun resolve(
         requested: String?,
         playInstalled: Boolean,
         galleryInstalled: Boolean,
-    ): AndroidStore = when (requested) {
-        null -> detect(playInstalled, galleryInstalled)
+        installerPackage: String? = null,
+    ): AndroidStore? = when (requested) {
+        null -> detect(playInstalled, galleryInstalled, installerPackage)
         AndroidStore.GOOGLE_PLAY.wireName ->
-            if (playInstalled) AndroidStore.GOOGLE_PLAY else AndroidStore.UNAVAILABLE
+            if (playInstalled) AndroidStore.GOOGLE_PLAY else null
         AndroidStore.HUAWEI_APP_GALLERY.wireName ->
-            if (galleryInstalled) AndroidStore.HUAWEI_APP_GALLERY
-            else AndroidStore.UNAVAILABLE
-        else -> AndroidStore.UNAVAILABLE
+            if (galleryInstalled) AndroidStore.HUAWEI_APP_GALLERY else null
+        else -> null
     }
 }
 
-/// Maps AppGallery review-flow result codes to plugin errors. A null result
-/// means the flow completed (comment submitted or user cancelled), mirroring
-/// the void contract of the Play review flow.
+/**
+ * Maps AppGallery review-flow result codes to plugin errors. A null result
+ * means the flow completed (comment submitted or dialog dismissed),
+ * mirroring the void contract of the Play review flow.
+ */
 internal object AppGalleryResults {
 
     fun errorFor(resultCode: Int): Pair<String, String>? = when (resultCode) {
-        0 -> "unknown_error" to "Unknown error while showing the AppGallery review dialog"
         101 -> "not_released" to "The app has not been released on AppGallery"
         104 -> "invalid_huawei_id" to "The HUAWEI ID sign-in status is invalid"
         105 -> "conditions_not_met" to
             "The user does not meet the conditions for displaying the comment pop-up"
         106 -> "comments_disabled" to "The commenting function is disabled"
         107 -> "service_unsupported" to "The in-app commenting service is not supported"
+        // Activity.RESULT_CANCELED (0) and the remaining codes complete the
+        // flow (user cancelled or dismissed the dialog), matching the Play
+        // review flow contract.
         else -> null
     }
 }

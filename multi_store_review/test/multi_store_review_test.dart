@@ -1,3 +1,4 @@
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mockito/mockito.dart';
 import 'package:multi_store_review/multi_store_review.dart';
@@ -8,6 +9,11 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   final multiStoreReview = MultiStoreReview.instance;
   late MockMultiStoreReviewPlatform platform;
+  late MultiStoreReviewPlatform originalPlatform;
+
+  setUpAll(() {
+    originalPlatform = MultiStoreReviewPlatform.instance;
+  });
 
   setUp(() {
     platform = MockMultiStoreReviewPlatform();
@@ -16,68 +22,128 @@ void main() {
 
   tearDown(() {
     verifyNoMoreInteractions(platform);
+    MultiStoreReviewPlatform.instance = originalPlatform;
+  });
+
+  test('instance is a singleton', () {
+    expect(MultiStoreReview.instance, same(multiStoreReview));
   });
 
   group('detectStore', () {
-    test('should call MultiStoreReviewPlatform.detectStore()', () async {
-      when(platform.detectStore())
-          .thenAnswer((_) async => ReviewStore.googlePlay);
+    test('delegates to MultiStoreReviewPlatform.detectStore()', () async {
+      when(platform.detectStore()).thenAnswer(
+        (_) async => ReviewStore.googlePlay,
+      );
 
       final result = await multiStoreReview.detectStore();
 
       verify(platform.detectStore());
       expect(result, ReviewStore.googlePlay);
     });
+
+    test('forwards a null (no store detected) result', () async {
+      when(platform.detectStore()).thenAnswer((_) async => null);
+
+      expect(await multiStoreReview.detectStore(), isNull);
+
+      verify(platform.detectStore());
+    });
+
+    test('surfaces platform exceptions to the caller', () async {
+      when(platform.detectStore()).thenAnswer(
+        (_) async => throw PlatformException(
+          code: MultiStoreReviewErrorCode.unavailableStore,
+        ),
+      );
+
+      await expectLater(
+        multiStoreReview.detectStore(),
+        throwsA(isA<PlatformException>()),
+      );
+
+      verify(platform.detectStore());
+    });
   });
 
-  group('isAvailable', () {
-    test('should call MultiStoreReviewPlatform.isAvailable()', () async {
-      when(platform.isAvailable()).thenAnswer((_) async => true);
+  group('canRequestReview', () {
+    test('delegates to MultiStoreReviewPlatform.canRequestReview()', () async {
+      when(platform.canRequestReview()).thenAnswer((_) async => true);
 
-      final result = await multiStoreReview.isAvailable();
+      final result = await multiStoreReview.canRequestReview();
 
-      verify(platform.isAvailable());
+      verify(platform.canRequestReview());
       expect(result, isTrue);
     });
   });
 
   group('requestReview', () {
-    test('should call requestReview without a store by default', () async {
-      when(platform.requestReview()).thenAnswer((_) async {});
+    test('delegates without a store by default and returns the used store',
+        () async {
+      when(platform.requestReview()).thenAnswer(
+        (_) async => ReviewStore.googlePlay,
+      );
 
-      await multiStoreReview.requestReview();
+      final usedStore = await multiStoreReview.requestReview();
 
       verify(platform.requestReview());
+      expect(usedStore, ReviewStore.googlePlay);
     });
 
-    test('should forward the explicit store', () async {
+    test('forwards the explicit store', () async {
       when(platform.requestReview(store: ReviewStore.huaweiAppGallery))
-          .thenAnswer((_) async {});
+          .thenAnswer((_) async => ReviewStore.huaweiAppGallery);
 
-      await multiStoreReview.requestReview(store: ReviewStore.huaweiAppGallery);
+      final usedStore = await multiStoreReview.requestReview(
+        store: ReviewStore.huaweiAppGallery,
+      );
 
       verify(platform.requestReview(store: ReviewStore.huaweiAppGallery));
+      expect(usedStore, ReviewStore.huaweiAppGallery);
+    });
+
+    test('surfaces platform exceptions to the caller', () async {
+      when(platform.requestReview()).thenAnswer(
+        (_) async => throw PlatformException(
+          code: MultiStoreReviewErrorCode.unavailableStore,
+        ),
+      );
+
+      await expectLater(
+        multiStoreReview.requestReview(),
+        throwsA(isA<PlatformException>()),
+      );
+
+      verify(platform.requestReview());
     });
   });
 
   group('openStoreListing', () {
-    test('should call MultiStoreReviewPlatform.openStoreListing()', () async {
-      const appStoreId = 'app_store_id';
-      const microsoftStoreId = 'microsoft_store_id';
-      when(platform.openStoreListing(
-        appStoreId: appStoreId,
-        microsoftStoreId: microsoftStoreId,
-      )).thenAnswer((_) async {});
+    test('delegates to MultiStoreReviewPlatform.openStoreListing()', () async {
+      const listing = StoreListing(
+        appStoreId: 'app_store_id',
+        microsoftStoreId: 'microsoft_store_id',
+      );
+      when(platform.openStoreListing(listing)).thenAnswer((_) async {});
 
-      await multiStoreReview.openStoreListing(
-        appStoreId: appStoreId,
-        microsoftStoreId: microsoftStoreId,
+      await multiStoreReview.openStoreListing(listing);
+
+      verify(platform.openStoreListing(listing));
+    });
+
+    test('surfaces platform exceptions to the caller', () async {
+      const listing = StoreListing(appStoreId: 'app_store_id');
+      when(platform.openStoreListing(listing)).thenAnswer(
+        (_) async => throw PlatformException(
+          code: MultiStoreReviewErrorCode.noStoreId,
+        ),
       );
 
-      verify(platform.openStoreListing(
-        appStoreId: appStoreId,
-        microsoftStoreId: microsoftStoreId,
-      ));
+      await expectLater(
+        multiStoreReview.openStoreListing(listing),
+        throwsA(isA<PlatformException>()),
+      );
+
+      verify(platform.openStoreListing(listing));
     });
   });
 }
@@ -86,35 +152,30 @@ class MockMultiStoreReviewPlatform extends Mock
     with MockPlatformInterfaceMixin
     implements MultiStoreReviewPlatform {
   @override
-  Future<ReviewStore> detectStore() => super.noSuchMethod(
+  Future<ReviewStore?> detectStore() => (super.noSuchMethod(
         Invocation.method(#detectStore, null),
-        returnValue: Future.value(ReviewStore.unavailable),
-      ) as Future<ReviewStore>;
+        returnValue: Future<ReviewStore?>.value(),
+        returnValueForMissingStub: Future<ReviewStore?>.value(),
+      ) as Future<ReviewStore?>);
 
   @override
-  Future<bool> isAvailable() => super.noSuchMethod(
-        Invocation.method(#isAvailable, null),
-        returnValue: Future.value(true),
-      ) as Future<bool>;
+  Future<bool> canRequestReview() => (super.noSuchMethod(
+        Invocation.method(#canRequestReview, null),
+        returnValue: Future<bool>.value(false),
+        returnValueForMissingStub: Future<bool>.value(false),
+      ) as Future<bool>);
 
   @override
-  Future<void> requestReview({ReviewStore? store}) => (super.noSuchMethod(
-        Invocation.method(#requestReview, null, {#store: store}),
-        returnValue: Future<void>.value(),
-        returnValueForMissingStub: Future<void>.value(),
-      ) as Future<void>);
-
-  @override
-  Future<void> openStoreListing({
-    String? appStoreId,
-    String? microsoftStoreId,
-  }) =>
+  Future<ReviewStore> requestReview({ReviewStore? store}) =>
       (super.noSuchMethod(
-        Invocation.method(
-          #openStoreListing,
-          null,
-          {#appStoreId: appStoreId, #microsoftStoreId: microsoftStoreId},
-        ),
+        Invocation.method(#requestReview, null, {#store: store}),
+        returnValue: Future.value(ReviewStore.googlePlay),
+        returnValueForMissingStub: Future.value(ReviewStore.googlePlay),
+      ) as Future<ReviewStore>);
+
+  @override
+  Future<void> openStoreListing(StoreListing listing) => (super.noSuchMethod(
+        Invocation.method(#openStoreListing, [listing]),
         returnValue: Future<void>.value(),
         returnValueForMissingStub: Future<void>.value(),
       ) as Future<void>);

@@ -49,11 +49,8 @@ android {
 
     dependencies {
         testImplementation("org.jetbrains.kotlin:kotlin-test")
-        // Release notes: https://developer.android.com/reference/com/google/android/play/core/release-notes-multi_store_reviews
+        // Release notes: https://developer.android.com/reference/com/google/android/play/core/release-notes
         implementation 'com.google.android.play:review:2.0.2'
-        implementation 'com.google.android.play:review-ktx:2.0.2'
-        // Release notes: https://developers.google.com/android/guides/releases
-        implementation 'com.google.android.gms:play-services-base:18.7.2'
     }
 
     testOptions {

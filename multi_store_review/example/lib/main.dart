@@ -19,7 +19,7 @@ class MultiStoreReviewExampleAppState
 
   String _appStoreId = '';
   String _microsoftStoreId = '';
-  ReviewStore _store = ReviewStore.unavailable;
+  ReviewStore? _store;
 
   @override
   void initState() {
@@ -29,10 +29,10 @@ class MultiStoreReviewExampleAppState
       try {
         // This plugin cannot be fully tested on Android by installing your
         // app locally. See the README testing section for more information.
-        final store = await _multiStoreReview.detectStore();
+        final ReviewStore? store = await _multiStoreReview.detectStore();
         setState(() => _store = store);
       } catch (_) {
-        setState(() => _store = ReviewStore.unavailable);
+        setState(() => _store = null);
       }
     });
   }
@@ -43,26 +43,36 @@ class MultiStoreReviewExampleAppState
 
   Future<void> _requestReview() async {
     try {
-      await _multiStoreReview.requestReview();
-    } on Exception catch (e) {
+      final ReviewStore used = await _multiStoreReview.requestReview();
+      _showSnack('requestReview shown by: ${used.name}');
+    } catch (e) {
       _showSnack('requestReview failed: $e');
     }
   }
 
   Future<void> _requestHuaweiReview() async {
     try {
-      await _multiStoreReview.requestReview(
+      final ReviewStore used = await _multiStoreReview.requestReview(
         store: ReviewStore.huaweiAppGallery,
       );
-    } on Exception catch (e) {
+      _showSnack('AppGallery review shown by: ${used.name}');
+    } catch (e) {
       _showSnack('AppGallery review failed: $e');
     }
   }
 
-  Future<void> _openStoreListing() => _multiStoreReview.openStoreListing(
-        appStoreId: _appStoreId,
-        microsoftStoreId: _microsoftStoreId,
+  Future<void> _openStoreListing() async {
+    try {
+      await _multiStoreReview.openStoreListing(
+        StoreListing(
+          appStoreId: _appStoreId,
+          microsoftStoreId: _microsoftStoreId,
+        ),
       );
+    } catch (e) {
+      _showSnack('openStoreListing failed: $e');
+    }
+  }
 
   void _showSnack(String message) {
     ScaffoldMessenger.of(context)
@@ -80,7 +90,7 @@ class MultiStoreReviewExampleAppState
             padding: const EdgeInsets.all(16),
             shrinkWrap: true,
             children: [
-              Text('Detected store: ${_store.name}'),
+              Text('Detected store: ${_store?.name ?? 'unavailable'}'),
               const SizedBox(height: 16),
               if (Platform.isIOS || Platform.isMacOS)
                 TextField(

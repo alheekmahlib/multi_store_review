@@ -10,12 +10,17 @@ add_library(${PLUGIN_NAME} SHARED
   "multi_store_review_plugin.cpp"
 )
 apply_standard_settings(${PLUGIN_NAME})
+# C++/WinRT reports failures through C++ exceptions, but the standard
+# settings disable them (_HAS_EXCEPTIONS=0), which turns every WinRT failure
+# into std::terminate(). Re-enable them so the plugin reports FlutterErrors.
+target_compile_definitions(${PLUGIN_NAME} PRIVATE "_HAS_EXCEPTIONS=1")
 set_target_properties(${PLUGIN_NAME} PROPERTIES
   CXX_VISIBILITY_PRESET hidden)
 target_compile_definitions(${PLUGIN_NAME} PRIVATE FLUTTER_PLUGIN_IMPL)
 target_compile_features(${PLUGIN_NAME} PRIVATE cxx_std_17)
-target_include_directories(${PLUGIN_NAME} INTERFACE
-  "${CMAKE_CURRENT_SOURCE_DIR}/include")
+target_include_directories(${PLUGIN_NAME}
+  PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/include"
+  INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}/include")
 target_link_libraries(${PLUGIN_NAME} PRIVATE flutter flutter_wrapper_plugin)
 # Required by C++/WinRT (RoInitialize and the Windows Runtime projections).
 target_link_libraries(${PLUGIN_NAME} PRIVATE windowsapp)

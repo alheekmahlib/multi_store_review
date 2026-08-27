@@ -1,3 +1,11 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
   package="dev.alheekmahlib.multi_store_review">
+
+    <!-- Package visibility (Android 11+ / API 30+): without these queries
+         PackageManager cannot see the store apps and store detection always
+         fails on modern devices. -->
+    <queries>
+        <package android:name="com.android.vending" />
+        <package android:name="com.huawei.appmarket" />
+    </queries>
 </manifest>

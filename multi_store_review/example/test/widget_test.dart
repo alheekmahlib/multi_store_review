@@ -1,27 +1,18 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
+import 'package:flutter_test/flutter_test.dart';
+import 'package:multi_store_review_example/main.dart';
 
-// import 'package:flutter/material.dart';
-// import 'package:flutter_test/flutter_test.dart';
+void main() {
+  testWidgets('example app renders the detected store placeholder',
+      (WidgetTester tester) async {
+    await tester.pumpWidget(const MultiStoreReviewExampleApp());
+    // Let the post-frame detectStore future settle (it falls back to
+    // 'unavailable' in the test environment).
+    await tester.pump();
+    await tester.pump();
 
-// import 'package:multi_store_review_example/main.dart';
-
-// void main() {
-//   testWidgets('Verify Platform version', (WidgetTester tester) async {
-//     // Build our app and trigger a frame.
-//     await tester.pumpWidget(const MyApp());
-
-//     // Verify that platform version is retrieved.
-//     expect(
-//       find.byWidgetPredicate(
-//         (Widget widget) => widget is Text &&
-//                            widget.data!.startsWith('Running on:'),
-//       ),
-//       findsOneWidget,
-//     );
-//   });
-// }
+    expect(find.text('Multi Store Review Example'), findsOneWidget);
+    expect(find.text('Detected store: unavailable'), findsOneWidget);
+    expect(find.text('Request Review (auto)'), findsOneWidget);
+    expect(find.text('Open Store Listing'), findsOneWidget);
+  });
+}

@@ -15,6 +15,12 @@ public class MultiStoreReviewPlugin: NSObject, FlutterPlugin {
         _ call: FlutterMethodCall, result: @escaping FlutterResult
     ) {
         switch call.method {
+        case "detectStore":
+            if #available(OSX 10.14, *) {
+                result("appleAppStore")
+            } else {
+                result("unavailable")
+            }
         case "requestReview":
             let store = call.arguments as? String
             if let store = store, store != "appleAppStore" {
@@ -26,45 +32,37 @@ public class MultiStoreReviewPlugin: NSObject, FlutterPlugin {
                 return
             }
             if #available(OSX 13.0, *) {
-                guard let viewController = NSApplication.shared.mainWindow? .contentViewController else {
+                guard let viewController = NSApplication.shared.mainWindow?.contentViewController else {
                     result(
                         FlutterError(
-                            code: "no-view-controller",
-                            message: "Could not get main view controller",
+                            code: "no_presenter",
+                            message: "Could not get the main window's view controller",
                             details: nil))
                     return
                 }
                 DispatchQueue.main.async {
                     AppStore.requestReview(in: viewController)
                 }
+                result("appleAppStore")
             } else if #available(OSX 10.14, *) {
                 SKStoreReviewController.requestReview()
+                result("appleAppStore")
             } else {
                 result(
                     FlutterError(
-                        code: "unavailable",
-                        message: "In-App Review unavailable", details: nil))
-            }
-            result(nil)
-        case "isAvailable":
-            if #available(OSX 10.14, *) {
-                result(true)
-            } else {
-                result(false)
-            }
-        case "detectStore":
-            if #available(OSX 10.14, *) {
-                result("appleAppStore")
-            } else {
-                result("unavailable")
+                        code: "unavailable_store",
+                        message: "In-App Review requires macOS 10.14 or newer",
+                        details: nil))
             }
         case "openStoreListing":
             let args = call.arguments as? [String: Any]
-            guard let storeId = args?["appStoreId"] as? String else {
+            let rawStoreId = (args?["appStoreId"] as? String)?
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let storeId = rawStoreId, !storeId.isEmpty else {
                 result(
                     FlutterError(
-                        code: "no-store-id",
-                        message: "Your store id must be passed as the method channel's argument",
+                        code: "no_store_id",
+                        message: "Your app store id must be passed as the method channel's argument",
                         details: nil))
                 return
             }

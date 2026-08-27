@@ -1,3 +1,5 @@
+#include "multi_store_review/multi_store_review_plugin_c_api.h"
+
 #include <flutter/method_channel.h>
 #include <flutter/plugin_registrar_windows.h>
 #include <flutter/standard_method_codec.h>
@@ -9,6 +11,7 @@
 #include <winrt/Windows.Services.Store.h>
 
 #include <memory>
+#include <optional>
 #include <string>
 
 namespace {
@@ -107,8 +110,6 @@ class MultiStoreReviewPlugin : public flutter::Plugin {
       std::unique_ptr<flutter::MethodResult<EncodableValue>> result) {
     if (method_call.method_name().compare("detectStore") == 0) {
       result->Success(EncodableValue(DetectStore()));
-    } else if (method_call.method_name().compare("isAvailable") == 0) {
-      result->Success(EncodableValue(HasPackageIdentity()));
     } else if (method_call.method_name().compare("requestReview") == 0) {
       RequestReview(method_call.arguments(), std::move(result));
     } else if (method_call.method_name().compare("openStoreListing") == 0) {
@@ -122,7 +123,8 @@ class MultiStoreReviewPlugin : public flutter::Plugin {
   /// StoreContext::RequestRateAndReviewAppAsync API. Requires package
   /// identity, otherwise an `unavailable_store` error is reported so that
   /// apps distributed outside the store can fall back to opening the store
-  /// listing.
+  /// listing. Completes with "microsoftStore" when the dialog flow ran,
+  /// including a user cancellation.
   void RequestReview(
       const EncodableValue* arguments,
       std::unique_ptr<flutter::MethodResult<EncodableValue>> result) {
@@ -144,14 +146,12 @@ class MultiStoreReviewPlugin : public flutter::Plugin {
       return;
     }
 
-    try {
-      try {
-        winrt::init_apartment(winrt::apartment_type::multi_threaded);
-      } catch (const winrt::hresult_error&) {
-        // The platform thread may already be initialized with a different
-        // apartment model; the agile async operation still works.
-      }
+    // The completion handler runs on a WinRT thread worker while the catch
+    // below runs on the platform thread; share ownership of the result so
+    // exactly one of them replies.
+    auto shared_result = std::shared_ptr(std::move(result));
 
+    try {
       auto context =
           winrt::Windows::Services::Store::StoreContext::GetDefault();
 
@@ -161,16 +161,19 @@ class MultiStoreReviewPlugin : public flutter::Plugin {
 
       auto operation = context.RequestRateAndReviewAppAsync();
 
-      // Keep the method result alive until the async operation completes;
-      // method channel replies may be sent from any thread.
-      auto shared_result = std::shared_ptr(std::move(result));
-
       operation.Completed(
           [shared_result](
               const winrt::Windows::Foundation::IAsyncOperation<
                   winrt::Windows::Services::Store::StoreRateAndReviewResult>&
                   operation,
               winrt::Windows::Foundation::AsyncStatus status) {
+            // A user cancelling resolves like on Android & iOS instead of
+            // surfacing as an error.
+            if (status ==
+                winrt::Windows::Foundation::AsyncStatus::Canceled) {
+              shared_result->Success(EncodableValue("microsoftStore"));
+              return;
+            }
             if (status !=
                 winrt::Windows::Foundation::AsyncStatus::Completed) {
               shared_result->Error(
@@ -179,10 +182,13 @@ class MultiStoreReviewPlugin : public flutter::Plugin {
             }
 
             const auto review = operation.GetResults();
-            if (review.Status() ==
-                winrt::Windows::Services::Store::StoreRateAndReviewStatus::
-                    Succeeded) {
-              shared_result->Success(nullptr);
+            const auto review_status = review.Status();
+            if (review_status == winrt::Windows::Services::Store::
+                                    StoreRateAndReviewStatus::Succeeded ||
+                review_status ==
+                    winrt::Windows::Services::Store::StoreRateAndReviewStatus::
+                        CanceledByUser) {
+              shared_result->Success(EncodableValue("microsoftStore"));
               return;
             }
 
@@ -201,11 +207,16 @@ class MultiStoreReviewPlugin : public flutter::Plugin {
             }
           });
     } catch (const winrt::hresult_error& e) {
-      result->Error("error", winrt::to_string(e.message()), nullptr);
+      shared_result->Error("error", winrt::to_string(e.message()), nullptr);
+    } catch (...) {
+      shared_result->Error(
+          "error",
+          "An unexpected error occurred during the rate and review request",
+          nullptr);
     }
   }
 
-  /// Opens the Microsoft Store review page for [microsoftStoreId].
+  /// Opens the Microsoft Store review page for the given microsoftStoreId.
   void OpenStoreListing(
       const EncodableValue* arguments,
       std::unique_ptr<flutter::MethodResult<EncodableValue>> result) {
@@ -213,7 +224,7 @@ class MultiStoreReviewPlugin : public flutter::Plugin {
         GetMapStringArgument(arguments, "microsoftStoreId");
     if (!microsoft_store_id.has_value() || microsoft_store_id->empty()) {
       result->Error(
-          "no-store-id",
+          "no_store_id",
           "Your microsoft store id must be passed as the method channel's "
           "argument",
           nullptr);
@@ -227,7 +238,7 @@ class MultiStoreReviewPlugin : public flutter::Plugin {
         ShellExecuteW(window_, L"open", url.c_str(), nullptr, nullptr,
                       SW_SHOWNORMAL);
     // ShellExecuteW returns a value <= 32 on failure.
-    if (reinterpret_cast<int>(instance) <= 32) {
+    if (reinterpret_cast<INT_PTR>(instance) <= 32) {
       result->Error(
           "error", "Failed to open the Microsoft Store review page",
           nullptr);
@@ -239,7 +250,9 @@ class MultiStoreReviewPlugin : public flutter::Plugin {
   HWND window_;
 };
 
-void MultiStoreReviewPluginRegisterWithRegistrar(
-    flutter::PluginRegistrarWindows* registrar) {
-  MultiStoreReviewPlugin::RegisterWithRegistrar(registrar);
+void MultiStoreReviewPluginCApiRegisterWithRegistrar(
+    FlutterDesktopPluginRegistrarRef registrar) {
+  MultiStoreReviewPlugin::RegisterWithRegistrar(
+      flutter::PluginRegistrarManager::GetInstance()
+          ->GetRegistrar<flutter::PluginRegistrarWindows>(registrar));
 }

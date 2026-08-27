@@ -14,7 +14,11 @@ internal class MultiStoreReviewPluginTest {
     fun detect_prefersGooglePlay_whenBothStoresInstalled() {
         assertEquals(
             AndroidStore.GOOGLE_PLAY,
-            StoreLogic.detect(playInstalled = true, galleryInstalled = true),
+            StoreLogic.detect(
+                playInstalled = true,
+                galleryInstalled = true,
+                installerPackage = null,
+            ),
         )
     }
 
@@ -22,15 +26,56 @@ internal class MultiStoreReviewPluginTest {
     fun detect_returnsAppGallery_onHuaweiOnlyDevices() {
         assertEquals(
             AndroidStore.HUAWEI_APP_GALLERY,
-            StoreLogic.detect(playInstalled = false, galleryInstalled = true),
+            StoreLogic.detect(
+                playInstalled = false,
+                galleryInstalled = true,
+                installerPackage = null,
+            ),
         )
     }
 
     @Test
-    fun detect_returnsUnavailable_whenNoStoreInstalled() {
+    fun detect_returnsNull_whenNoStoreInstalled() {
+        assertNull(
+            StoreLogic.detect(
+                playInstalled = false,
+                galleryInstalled = false,
+                installerPackage = null,
+            ),
+        )
+    }
+
+    @Test
+    fun detect_prefersTheInstallerStore_overPresenceOrder() {
+        // A Huawei device with both stores installed, app installed via
+        // AppGallery: only AppGallery has the app listed for review.
         assertEquals(
-            AndroidStore.UNAVAILABLE,
-            StoreLogic.detect(playInstalled = false, galleryInstalled = false),
+            AndroidStore.HUAWEI_APP_GALLERY,
+            StoreLogic.detect(
+                playInstalled = true,
+                galleryInstalled = true,
+                installerPackage = "com.huawei.appmarket",
+            ),
+        )
+    }
+
+    @Test
+    fun detect_fallsBackToPresenceOrder_forSideloadedOrUnknownInstallers() {
+        assertEquals(
+            AndroidStore.GOOGLE_PLAY,
+            StoreLogic.detect(
+                playInstalled = true,
+                galleryInstalled = true,
+                installerPackage = "com.android.packageinstaller",
+            ),
+        )
+        assertEquals(
+            AndroidStore.GOOGLE_PLAY,
+            StoreLogic.detect(
+                playInstalled = true,
+                galleryInstalled = false,
+                installerPackage = "com.huawei.appmarket",
+            ),
         )
     }
 
@@ -42,7 +87,12 @@ internal class MultiStoreReviewPluginTest {
     fun resolve_autoDetects_whenNoStoreRequested() {
         assertEquals(
             AndroidStore.HUAWEI_APP_GALLERY,
-            StoreLogic.resolve(null, playInstalled = false, galleryInstalled = true),
+            StoreLogic.resolve(
+                null,
+                playInstalled = false,
+                galleryInstalled = true,
+                installerPackage = null,
+            ),
         )
     }
 
@@ -50,7 +100,11 @@ internal class MultiStoreReviewPluginTest {
     fun resolve_honoursExplicitGooglePlayRequest() {
         assertEquals(
             AndroidStore.GOOGLE_PLAY,
-            StoreLogic.resolve("googlePlay", playInstalled = true, galleryInstalled = true),
+            StoreLogic.resolve(
+                "googlePlay",
+                playInstalled = true,
+                galleryInstalled = true,
+            ),
         )
     }
 
@@ -67,18 +121,24 @@ internal class MultiStoreReviewPluginTest {
     }
 
     @Test
-    fun resolve_returnsUnavailable_forRequestedStoreNotInstalled() {
-        assertEquals(
-            AndroidStore.UNAVAILABLE,
-            StoreLogic.resolve("googlePlay", playInstalled = false, galleryInstalled = true),
+    fun resolve_returnsNull_forRequestedStoreNotInstalled() {
+        assertNull(
+            StoreLogic.resolve(
+                "googlePlay",
+                playInstalled = false,
+                galleryInstalled = true,
+            ),
         )
     }
 
     @Test
-    fun resolve_returnsUnavailable_forUnknownStoreName() {
-        assertEquals(
-            AndroidStore.UNAVAILABLE,
-            StoreLogic.resolve("mars", playInstalled = true, galleryInstalled = true),
+    fun resolve_returnsNull_forUnknownStoreName() {
+        assertNull(
+            StoreLogic.resolve(
+                "mars",
+                playInstalled = true,
+                galleryInstalled = true,
+            ),
         )
     }
 
@@ -89,7 +149,6 @@ internal class MultiStoreReviewPluginTest {
     @Test
     fun errorFor_mapsEveryDocumentedFailureCode() {
         val expectedCodes = mapOf(
-            0 to "unknown_error",
             101 to "not_released",
             104 to "invalid_huawei_id",
             105 to "conditions_not_met",
@@ -106,5 +165,13 @@ internal class MultiStoreReviewPluginTest {
         assertNull(AppGalleryResults.errorFor(102))
         assertNull(AppGalleryResults.errorFor(103))
         assertNull(AppGalleryResults.errorFor(108))
+        assertNull(AppGalleryResults.errorFor(111))
+    }
+
+    @Test
+    fun errorFor_treatsResultCanceledAsCompletion() {
+        // Activity.RESULT_CANCELED is delivered when the user simply closes
+        // the dialog; it must not surface as an error.
+        assertNull(AppGalleryResults.errorFor(0))
     }
 }

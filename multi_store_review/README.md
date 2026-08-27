@@ -20,12 +20,17 @@ implementation on Windows.
 | Apple App Store   | iOS & macOS    | ✅ StoreKit `requestReview` | ✅ |
 | Microsoft Store   | Windows (MSIX) | ✅ `StoreContext.RequestRateAndReviewAppAsync` | ✅ |
 
-On Android the store is detected automatically: if the Google Play Store is
-installed it is preferred, otherwise Huawei AppGallery is used. You can also
+On Android the store is detected automatically. The store your app was
+**installed from** is preferred, falling back to the Google Play Store and
+then Huawei AppGallery when only presence can be determined. You can also
 target a store explicitly.
 
-Linux and web are not supported; `isAvailable()` returns `false` there and the
-other methods throw an `UnsupportedError`.
+The required `<queries>` package-visibility entries for Google Play and
+AppGallery ship in the plugin's own manifest and merge into your app
+automatically — no manual manifest changes needed on Android 11+.
+
+Linux and web are not supported; `canRequestReview()` returns `false` there
+and the other methods throw an `UnsupportedError`.
 
 # Usage
 
@@ -34,16 +39,19 @@ import 'package:multi_store_review/multi_store_review.dart';
 
 final MultiStoreReview multiStoreReview = MultiStoreReview.instance;
 
-// Which store is installed on this device?
-final ReviewStore store = await multiStoreReview.detectStore();
+// Which store is present on this device? null when none was detected.
+final ReviewStore? store = await multiStoreReview.detectStore();
 
-if (await multiStoreReview.isAvailable()) {
-  // Shows the review dialog of the detected store.
-  await multiStoreReview.requestReview();
+if (await multiStoreReview.canRequestReview()) {
+  // Shows the review dialog of the detected store and completes with the
+  // store that was actually used.
+  final ReviewStore used = await multiStoreReview.requestReview();
 } else {
   await multiStoreReview.openStoreListing(
-    appStoreId: '14939 scooter calendar', // required on iOS & macOS
-    microsoftStoreId: '9NBLGGH42LBS', // required on Windows
+    const StoreListing(
+      appStoreId: '1493928622', // numeric id, required on iOS & macOS
+      microsoftStoreId: '9NBLGGH42LBS', // required on Windows
+    ),
   );
 }
 ```
@@ -53,11 +61,34 @@ if (await multiStoreReview.isAvailable()) {
 ```dart
 // Force the Huawei AppGallery review dialog even when Google Play exists,
 // for example when you know the build is distributed through AppGallery.
-await multiStoreReview.requestReview(store: ReviewStore.huaweiAppGallery);
+final ReviewStore used = await multiStoreReview.requestReview(
+  store: ReviewStore.huaweiAppGallery,
+);
 ```
 
 Requesting a store that is not installed on the device throws a
-`PlatformException` with the `unavailable_store` error code.
+`PlatformException` with the
+`MultiStoreReviewErrorCode.unavailableStore` error code.
+
+## Error codes
+
+Match these via `MultiStoreReviewErrorCode` instead of raw strings:
+
+| Constant | Meaning |
+|---|---|
+| `unavailableStore` | No supported store on the device, requested store missing, or (Windows) the app is not MSIX-packaged. |
+| `notReleased` | The app has not been released on AppGallery. |
+| `invalidHuaweiId` | The HUAWEI ID sign-in status is invalid. |
+| `conditionsNotMet` | The user does not meet the AppGallery pop-up conditions. |
+| `commentsDisabled` | The AppGallery commenting function is disabled. |
+| `serviceUnsupported` | The in-app commenting service is not supported. |
+| `noStoreId` | The store listing id required on this platform was missing. |
+| `urlConstructFail` | The review page URL could not be constructed. |
+| `noPresenter` | No window scene (iOS) / view controller (macOS) to present the dialog in. |
+| `error` | Generic failure of the review flow or store listing launch. |
+
+A user **dismissing** the dialog never throws — on every platform the
+`requestReview` future resolves normally; only genuine failures do.
 
 # Huawei AppGallery requirements
 
@@ -76,7 +107,7 @@ the `com.huawei.appmarket.intent.action.guidecomment` intent, so no HMS SDK or
 
 `requestReview` uses the WinRT `StoreContext.RequestRateAndReviewAppAsync`
 API and therefore requires the app to be **packaged (MSIX) and distributed
-through the Microsoft Store**. Unpackaged apps get `isAvailable() == false`
+through the Microsoft Store**. Unpackaged apps get `detectStore() == null`
 and an `unavailable_store` error — fall back to `openStoreListing`, which
 needs your `microsoftStoreId` (ProductId from Partner Center).
 
@@ -121,7 +152,7 @@ Apple's [testing guide](https://developer.apple.com/documentation/storekit/reque
 ## Windows
 
 The rating dialog requires a Store-published MSIX package. During development
-you can test the unpackaged fallback: `detectStore()` returns `unavailable`
+you can test the unpackaged fallback: `detectStore()` returns `null`
 and `openStoreListing` still opens the `ms-windows-store://` review page.
 
 # Credits
