@@ -1,1 +1,1 @@
-in_app_review/README.md
+multi_store_review/README.md

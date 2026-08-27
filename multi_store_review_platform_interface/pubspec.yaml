@@ -1,0 +1,24 @@
+name: multi_store_review_platform_interface
+description: A common platform interface for the multi_store_review plugin.
+# NOTE: We strongly prefer non-breaking changes, even at the expense of a
+# less-clean API. See https://flutter.dev/go/platform-interface-breaking-changes
+version: 1.0.0
+homepage: https://github.com/devdoxconnect/multi_store_review/tree/master/multi_store_review_platform_interface
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+  flutter: ">=3.3.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  url_launcher: ^6.1.0
+  plugin_platform_interface: ^2.0.0
+  platform: ^3.0.0
+
+  
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+    
