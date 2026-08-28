@@ -39,6 +39,7 @@ class ReviewGateState {
         final Object? value = map[key];
         return value is num ? value.toInt() : 0;
       }
+
       return ReviewGateState(
         launches: read('launches'),
         firstLaunchAt: read('firstLaunchAt'),

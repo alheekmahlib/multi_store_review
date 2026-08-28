@@ -79,12 +79,19 @@ class MethodChannelMultiStoreReview extends MultiStoreReviewPlatform {
   Future<void> openStoreListing(StoreListing listing) async {
     _ensureSupportedPlatform();
 
-    final bool isApple = _platform.isIOS || _platform.isMacOS;
-    if (isApple && _isBlank(listing.appStoreId)) {
+    if (_platform.isIOS && _isBlank(listing.appStoreId)) {
       throw ArgumentError.value(
         listing.appStoreId,
         'appStoreId',
-        'a non-empty id is required on iOS & macOS',
+        'a non-empty id is required on iOS',
+      );
+    }
+    if (_platform.isMacOS &&
+        _isBlank(listing.macAppStoreId ?? listing.appStoreId)) {
+      throw ArgumentError.value(
+        listing.macAppStoreId ?? listing.appStoreId,
+        'macAppStoreId',
+        'a non-empty id (or a fallback appStoreId) is required on macOS',
       );
     }
     if (_platform.isWindows && _isBlank(listing.microsoftStoreId)) {
@@ -97,6 +104,7 @@ class MethodChannelMultiStoreReview extends MultiStoreReviewPlatform {
 
     await _channel.invokeMethod<void>('openStoreListing', <String, String?>{
       'appStoreId': listing.appStoreId,
+      'macAppStoreId': listing.macAppStoreId,
       'microsoftStoreId': listing.microsoftStoreId,
     });
   }

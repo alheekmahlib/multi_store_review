@@ -70,15 +70,20 @@ if (await multiStoreReview.canRequestReview()) {
   // Shows the review dialog of the detected store and completes with the
   // store that was actually used.
   final ReviewStore used = await multiStoreReview.requestReview();
-} else {
-  await multiStoreReview.openStoreListing(
-    const StoreListing(
-      appStoreId: '1493928622', // numeric id, required on iOS & macOS
-      microsoftStoreId: '9NBLGGH42LBS', // required on Windows
-    ),
-  );
-}
+  } else {
+    await multiStoreReview.openStoreListing(
+      const StoreListing(
+        appStoreId: '1493928622', // numeric id, required on iOS
+        macAppStoreId: '6446479222', // when the macOS listing differs
+        microsoftStoreId: '9NBLGGH42LBS', // required on Windows
+      ),
+    );
+  }
 ```
+
+`macAppStoreId` is only needed when your macOS app is a separate App Store
+record from the iOS one; universal-purchase apps can rely on `appStoreId`
+alone and macOS will use it as the fallback.
 
 # Automatic review gate (recommended)
 

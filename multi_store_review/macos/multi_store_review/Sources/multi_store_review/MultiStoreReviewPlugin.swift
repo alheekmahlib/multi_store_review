@@ -55,9 +55,17 @@ public class MultiStoreReviewPlugin: NSObject, FlutterPlugin {
             }
         case "openStoreListing":
             let args = call.arguments as? [String: Any]
-            let rawStoreId = (args?["appStoreId"] as? String)?
+            // The macOS listing often differs from the iOS one; fall back
+            // to appStoreId for universal-purchase apps.
+            let macAppStoreId = args?["macAppStoreId"] as? String
+            let appStoreId = args?["appStoreId"] as? String
+            let rawStoreId =
+                (macAppStoreId != nil && !macAppStoreId!.isEmpty)
+                ? macAppStoreId
+                : appStoreId
+            let trimmedStoreId = rawStoreId?
                 .trimmingCharacters(in: .whitespacesAndNewlines)
-            guard let storeId = rawStoreId, !storeId.isEmpty else {
+            guard let storeId = trimmedStoreId, !storeId.isEmpty else {
                 result(
                     FlutterError(
                         code: "no_store_id",

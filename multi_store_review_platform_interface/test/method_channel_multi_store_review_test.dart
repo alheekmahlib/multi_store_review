@@ -188,6 +188,7 @@ void main() {
       await plugin.openStoreListing(
         const StoreListing(
           appStoreId: 'app_store_id',
+          macAppStoreId: 'mac_app_store_id',
           microsoftStoreId: 'microsoft_store_id',
         ),
       );
@@ -197,6 +198,7 @@ void main() {
           'openStoreListing',
           arguments: {
             'appStoreId': 'app_store_id',
+            'macAppStoreId': 'mac_app_store_id',
             'microsoftStoreId': 'microsoft_store_id',
           },
         ),
@@ -223,7 +225,31 @@ void main() {
       );
     });
 
-    test('requires a non-blank appStoreId on macOS', () async {
+    test('on macOS accepts macAppStoreId alone and falls back to appStoreId',
+        () async {
+      plugin = MethodChannelMultiStoreReview(
+        channel: channel,
+        platform: FakePlatform(operatingSystem: 'macos'),
+      );
+
+      // A dedicated mac id works on its own.
+      await plugin.openStoreListing(
+        const StoreListing(macAppStoreId: 'mac_app_store_id'),
+      );
+      // A shared appStoreId is used as the fallback.
+      await plugin.openStoreListing(
+        const StoreListing(appStoreId: 'app_store_id'),
+      );
+
+      final List<Map<Object?, Object?>> sentArgs = log
+          .whereType<MethodCall>()
+          .map((MethodCall call) => call.arguments as Map<Object?, Object?>)
+          .toList();
+      expect(sentArgs[0]['macAppStoreId'], 'mac_app_store_id');
+      expect(sentArgs[1]['appStoreId'], 'app_store_id');
+    });
+
+    test('requires a non-blank mac id on macOS', () async {
       plugin = MethodChannelMultiStoreReview(
         channel: channel,
         platform: FakePlatform(operatingSystem: 'macos'),
@@ -231,6 +257,10 @@ void main() {
 
       await expectLater(
         plugin.openStoreListing(const StoreListing()),
+        throwsArgumentError,
+      );
+      await expectLater(
+        plugin.openStoreListing(const StoreListing(macAppStoreId: ' ')),
         throwsArgumentError,
       );
     });

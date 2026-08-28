@@ -1,3 +1,11 @@
+# 2.2.0
+
+- `StoreListing.macAppStoreId`: apps whose macOS App Store listing differs
+  from the iOS one (separate app records instead of a universal purchase)
+  can now pass both identifiers. On macOS `macAppStoreId` is used and
+  `appStoreId` remains the fallback, so existing universal-purchase setups
+  keep working unchanged. Validation on macOS now accepts either id.
+
 # 2.1.0
 
 Automatic review gate — prompt users at the right time with two lines and

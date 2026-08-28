@@ -1,3 +1,9 @@
+# 2.2.0
+
+- Additive: `StoreListing.macAppStoreId` for apps with a separate macOS
+  listing; `appStoreId` remains the fallback. The `openStoreListing` wire
+  map now carries a `macAppStoreId` key.
+
 # 2.1.0
 
 - Additive: `readReviewGateState()` / `writeReviewGateState(...)` platform
