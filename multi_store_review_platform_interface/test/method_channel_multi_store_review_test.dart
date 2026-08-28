@@ -240,6 +240,10 @@ void main() {
       await plugin.openStoreListing(
         const StoreListing(appStoreId: 'app_store_id'),
       );
+      // A blank mac id behaves like absence and falls back too.
+      await plugin.openStoreListing(
+        const StoreListing(appStoreId: 'app_store_id', macAppStoreId: ''),
+      );
 
       final List<Map<Object?, Object?>> sentArgs = log
           .whereType<MethodCall>()
@@ -247,6 +251,7 @@ void main() {
           .toList();
       expect(sentArgs[0]['macAppStoreId'], 'mac_app_store_id');
       expect(sentArgs[1]['appStoreId'], 'app_store_id');
+      expect(sentArgs[2]['appStoreId'], 'app_store_id');
     });
 
     test('requires a non-blank mac id on macOS', () async {

@@ -87,7 +87,8 @@ class MethodChannelMultiStoreReview extends MultiStoreReviewPlatform {
       );
     }
     if (_platform.isMacOS &&
-        _isBlank(listing.macAppStoreId ?? listing.appStoreId)) {
+        _isBlank(listing.macAppStoreId) &&
+        _isBlank(listing.appStoreId)) {
       throw ArgumentError.value(
         listing.macAppStoreId ?? listing.appStoreId,
         'macAppStoreId',
