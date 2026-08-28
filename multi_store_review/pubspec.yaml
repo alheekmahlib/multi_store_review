@@ -1,6 +1,6 @@
 name: multi_store_review
 description: "Flutter plugin for showing the in-app review/rating pop-up across multiple stores - Google Play, Huawei AppGallery, Apple App Store and the Microsoft Store. It makes it easy for users to rate your app."
-version: 2.0.0
+version: 2.1.0
 homepage: https://github.com/alheekmahlib/multi_store_review/tree/main/multi_store_review
 repository: https://github.com/alheekmahlib/multi_store_review
 issue_tracker: https://github.com/alheekmahlib/multi_store_review/issues
@@ -12,7 +12,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  multi_store_review_platform_interface: ^2.0.0
+  multi_store_review_platform_interface: ^2.1.0
 
 dependency_overrides:
   multi_store_review_platform_interface:

@@ -32,6 +32,30 @@ automatically — no manual manifest changes needed on Android 11+.
 Linux and web are not supported; `canRequestReview()` returns `false` there
 and the other methods throw an `UnsupportedError`.
 
+# Installation
+
+Until the package is published on pub.dev, depend on it via Git. The
+platform interface lives in the same repository, so add a
+`dependency_overrides` entry for it too:
+
+```yaml
+dependencies:
+  multi_store_review:
+    git:
+      url: https://github.com/alheekmahlib/multi_store_review.git
+      path: multi_store_review
+
+dependency_overrides:
+  multi_store_review_platform_interface:
+    git:
+      url: https://github.com/alheekmahlib/multi_store_review.git
+      path: multi_store_review_platform_interface
+```
+
+No platform setup is required: the `<queries>` package-visibility entries
+needed for store detection on Android 11+ ship in the plugin's own
+manifest and merge into your app automatically.
+
 # Usage
 
 ```dart
@@ -55,6 +79,83 @@ if (await multiStoreReview.canRequestReview()) {
   );
 }
 ```
+
+# Automatic review gate (recommended)
+
+Instead of deciding yourself when to prompt, arm the gate once at startup
+and ask it at natural pauses. The state (launch count, timestamps)
+persists on the platform itself — **no storage package needed** — and the
+defaults (3+ launches, 60 days between prompts) suit most apps:
+
+```dart
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  unawaited(MultiStoreReview.instance.configure());
+  runApp(const MyApp());
+}
+
+// After a positive moment — a finished level, a completed session:
+final shown = await MultiStoreReview.instance.maybeRequestReview(
+  listing: const StoreListing(
+    appStoreId: '1493928622',       // fallback when no store can review
+    microsoftStoreId: '9NBLGGH42LBS',
+  ),
+);
+```
+
+`maybeRequestReview` never throws and returns `false` when the gate
+decides to wait, when no store can review and no `listing` was given, or
+when the store flow fails. Call `resetReviewGate()` to clear the state
+(tests & debugging).
+
+Custom numbers:
+
+```dart
+await MultiStoreReview.instance.configure(
+  const ReviewPolicy(
+    minLaunches: 5,
+    minDaysBetweenPrompts: 90,
+    maxDaysSinceInstall: 365, // stop asking long-abandoned users
+  ),
+);
+```
+
+Keeping the state in your own storage instead (optional — the keys are
+documented in `ReviewStorageKeys`):
+
+```dart
+// get_storage
+class GetStorageReviewStorage implements ReviewStorage {
+  GetStorageReviewStorage(this._box);
+  final GetStorage _box;
+
+  @override
+  Future<int?> readInt(String key) async => _box.read<int>(key);
+
+  @override
+  Future<void> writeInt(String key, int value) async =>
+      _box.write(key, value);
+}
+
+// SharedPreferences
+class SharedPreferencesReviewStorage implements ReviewStorage {
+  SharedPreferencesReviewStorage(this._prefs);
+  final SharedPreferences _prefs;
+
+  @override
+  Future<int?> readInt(String key) async => _prefs.getInt(key);
+
+  @override
+  Future<void> writeInt(String key, int value) async =>
+      _prefs.setInt(key, value);
+}
+
+await MultiStoreReview.instance.configure(storage: GetStorageReviewStorage(box));
+```
+
+Remember that the store quotas still apply on top of the gate: calling
+`requestReview` (directly or through the gate) never guarantees that a
+dialog is shown.
 
 ## Targeting a specific store (Android)
 

@@ -101,6 +101,21 @@ class MethodChannelMultiStoreReview extends MultiStoreReviewPlatform {
     });
   }
 
+  @override
+  Future<ReviewGateState> readReviewGateState() async {
+    // The gate must keep working (as "nothing recorded") even where the
+    // plugin has no native side.
+    if (kIsWeb || !_isSupportedPlatform) return ReviewGateState.empty;
+    final Object? state = await _channel.invokeMethod('readReviewGateState');
+    return ReviewGateState.fromMap(state);
+  }
+
+  @override
+  Future<void> writeReviewGateState(ReviewGateState state) async {
+    if (kIsWeb || !_isSupportedPlatform) return;
+    await _channel.invokeMethod<void>('writeReviewGateState', state.toMap());
+  }
+
   static bool _isBlank(String? value) => value == null || value.trim().isEmpty;
 
   void _ensureSupportedPlatform() {

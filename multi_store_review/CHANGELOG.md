@@ -1,3 +1,25 @@
+# 2.1.0
+
+Automatic review gate — prompt users at the right time with two lines and
+no storage package of your own.
+
+- `MultiStoreReview.instance.configure()` counts the app launch and arms
+  the gate with a sensible default policy (3+ launches, 60 days between
+  prompts). Pass a `ReviewPolicy` to change the numbers
+  (`minLaunches`, `minDaysBetweenPrompts`, `maxDaysSinceInstall`).
+- `maybeRequestReview({listing})` asks the gate whether it is time to
+  prompt and, when allowed, shows the review dialog of the detected store
+  — or falls back to `openStoreListing(listing)` when no store can review.
+  Returns whether a prompt attempt happened; store-flow
+  `PlatformException`s are swallowed. Concurrent calls share one flow.
+- The gate state persists natively (SharedPreferences on Android,
+  UserDefaults on iOS & macOS, a small file under %APPDATA% on Windows) —
+  the app needs no storage dependency.
+- `resetReviewGate()` clears the state for tests and debugging.
+- Advanced: pass a `ReviewStorage` (`readInt`/`writeInt`) to `configure`
+  to keep the state in your own store instead (get_storage, Hive,
+  SharedPreferences adapters documented in the README).
+
 # 2.0.0
 
 Breaking overhaul based on a full code review of the library. Thanks to the

@@ -51,6 +51,11 @@ class MultiStoreReviewPlugin :
                 result.success(detectStore()?.wireName ?: StoreLogic.UNAVAILABLE)
             "requestReview" -> requestReview(call.arguments as? String, result)
             "openStoreListing" -> openStoreListing(result)
+            "readReviewGateState" -> result.success(readGateState())
+            "writeReviewGateState" -> {
+                writeGateState(call.arguments as? Map<*, *>)
+                result.success(null)
+            }
             else -> result.notImplemented()
         }
     }
@@ -109,6 +114,31 @@ class MultiStoreReviewPlugin :
         } ?: result.success(AndroidStore.HUAWEI_APP_GALLERY.wireName)
 
         return true
+    }
+
+    // Review gate state (built-in storage)
+
+    private fun readGateState(): Map<String, Any> {
+        val context = this.context ?: return emptyMap()
+        val prefs = context.getSharedPreferences(GATE_PREFS, Context.MODE_PRIVATE)
+        return mapOf(
+            "launches" to prefs.getInt("launches", 0),
+            "firstLaunchAt" to prefs.getLong("firstLaunchAt", 0L),
+            "lastPromptAt" to prefs.getLong("lastPromptAt", 0L),
+        )
+    }
+
+    private fun writeGateState(state: Map<*, *>?) {
+        val context = this.context ?: return
+        fun value(key: String): Long =
+            ((state?.get(key) as? Number)?.toLong()) ?: 0L
+
+        context.getSharedPreferences(GATE_PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putInt("launches", ((state?.get("launches") as? Number)?.toInt()) ?: 0)
+            .putLong("firstLaunchAt", value("firstLaunchAt"))
+            .putLong("lastPromptAt", value("lastPromptAt"))
+            .apply()
     }
 
     // Store detection
@@ -323,6 +353,9 @@ class MultiStoreReviewPlugin :
             "com.huawei.appmarket.intent.action.guidecomment"
 
         private const val APP_GALLERY_REQUEST_CODE = 1001
+
+        /** SharedPreferences file holding the built-in review gate state. */
+        private const val GATE_PREFS = "dev.alheekmahlib.multi_store_review.gate"
     }
 }
 

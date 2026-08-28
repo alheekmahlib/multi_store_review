@@ -1,9 +1,18 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:multi_store_review/multi_store_review.dart';
 
-void main() => runApp(const MultiStoreReviewExampleApp());
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Counts the launch and arms the automatic review gate with the default
+  // policy (3+ launches, 60 days between prompts).
+  unawaited(MultiStoreReview.instance.configure());
+
+  runApp(const MultiStoreReviewExampleApp());
+}
 
 class MultiStoreReviewExampleApp extends StatefulWidget {
   const MultiStoreReviewExampleApp({super.key});
@@ -74,6 +83,18 @@ class MultiStoreReviewExampleAppState
     }
   }
 
+  Future<void> _maybeRequestReview() async {
+    final bool shown = await _multiStoreReview.maybeRequestReview(
+      listing: const StoreListing(
+        appStoreId: '1493928622',
+        microsoftStoreId: '9NBLGGH42LBS',
+      ),
+    );
+    _showSnack(
+      shown ? 'The review gate prompted the user' : 'The review gate waits',
+    );
+  }
+
   void _showSnack(String message) {
     ScaffoldMessenger.of(context)
         .showSnackBar(SnackBar(content: Text(message)));
@@ -108,6 +129,10 @@ class MultiStoreReviewExampleAppState
               ElevatedButton(
                 onPressed: _requestReview,
                 child: const Text('Request Review (auto)'),
+              ),
+              ElevatedButton(
+                onPressed: _maybeRequestReview,
+                child: const Text('Maybe Request Review (gated)'),
               ),
               if (Platform.isAndroid) ...[
                 ElevatedButton(

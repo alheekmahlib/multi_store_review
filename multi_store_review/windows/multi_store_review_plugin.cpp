@@ -11,9 +11,12 @@
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Services.Store.h>
 
+#include <cstdint>
+#include <fstream>
 #include <memory>
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace {
 
@@ -78,6 +81,86 @@ std::wstring ToWideString(const std::string& narrow) {
   return wide;
 }
 
+/// The persisted review gate state: counted launches plus two millisecond
+/// timestamps (0 = not set).
+struct GateState {
+  int64_t launches = 0;
+  int64_t first_launch_at = 0;
+  int64_t last_prompt_at = 0;
+};
+
+/// Directory of the gate state file: %APPDATA%\multi_store_review. Unlike
+/// packaged apps, unpackaged Win32 apps have no ApplicationData container,
+/// so a small file is used for both cases.
+std::wstring GateStateDir() {
+  const DWORD size = GetEnvironmentVariableW(L"APPDATA", nullptr, 0);
+  if (size == 0) {
+    return std::wstring();
+  }
+  std::vector<wchar_t> buffer(size, L'\0');
+  GetEnvironmentVariableW(L"APPDATA", buffer.data(), size);
+  return std::wstring(buffer.data()) + L"\\multi_store_review";
+}
+
+std::wstring GateStateFilePath() {
+  return GateStateDir() + L"\\review_gate.txt";
+}
+
+GateState ReadGateStateFile() {
+  GateState state;
+  std::wifstream file(GateStateFilePath());
+  if (!file.is_open()) {
+    return state;
+  }
+  file >> state.launches >> state.first_launch_at >> state.last_prompt_at;
+  // Parse failures leave zeros; the gate then starts over.
+  return state;
+}
+
+void WriteGateStateFile(const GateState& state) {
+  const std::wstring dir = GateStateDir();
+  if (dir.empty()) {
+    return;
+  }
+  CreateDirectoryW(dir.c_str(), nullptr);
+  std::wofstream file(GateStateFilePath());
+  if (!file.is_open()) {
+    return;
+  }
+  file << state.launches << L' ' << state.first_launch_at << L' '
+       << state.last_prompt_at;
+}
+
+std::optional<int64_t> GetMapInt64Argument(
+    const EncodableValue* arguments, const char* key) {
+  if (arguments == nullptr) {
+    return std::nullopt;
+  }
+  const auto* map = std::get_if<EncodableMap>(arguments);
+  if (map == nullptr) {
+    return std::nullopt;
+  }
+  const auto it = map->find(EncodableValue(key));
+  if (it == map->end()) {
+    return std::nullopt;
+  }
+  if (const auto* v64 = std::get_if<int64_t>(&it->second)) {
+    return *v64;
+  }
+  if (const auto* v32 = std::get_if<int32_t>(&it->second)) {
+    return static_cast<int64_t>(*v32);
+  }
+  return std::nullopt;
+}
+
+EncodableValue GateStateToValue(const GateState& state) {
+  EncodableMap map;
+  map[EncodableValue("launches")] = EncodableValue(state.launches);
+  map[EncodableValue("firstLaunchAt")] = EncodableValue(state.first_launch_at);
+  map[EncodableValue("lastPromptAt")] = EncodableValue(state.last_prompt_at);
+  return EncodableValue(map);
+}
+
 }  // namespace
 
 class MultiStoreReviewPlugin : public flutter::Plugin {
@@ -115,6 +198,17 @@ class MultiStoreReviewPlugin : public flutter::Plugin {
       RequestReview(method_call.arguments(), std::move(result));
     } else if (method_call.method_name().compare("openStoreListing") == 0) {
       OpenStoreListing(method_call.arguments(), std::move(result));
+    } else if (method_call.method_name().compare("readReviewGateState") == 0) {
+      result->Success(GateStateToValue(ReadGateStateFile()));
+    } else if (method_call.method_name().compare("writeReviewGateState") == 0) {
+      WriteGateStateFile(GateState{
+          GetMapInt64Argument(method_call.arguments(), "launches").value_or(0),
+          GetMapInt64Argument(method_call.arguments(), "firstLaunchAt")
+              .value_or(0),
+          GetMapInt64Argument(method_call.arguments(), "lastPromptAt")
+              .value_or(0),
+      });
+      result->Success(nullptr);
     } else {
       result->NotImplemented();
     }

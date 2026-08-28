@@ -160,14 +160,14 @@ packages:
       path: ".."
       relative: true
     source: path
-    version: "2.0.0"
+    version: "2.1.0"
   multi_store_review_platform_interface:
     dependency: "direct overridden"
     description:
       path: "../../multi_store_review_platform_interface"
       relative: true
     source: path
-    version: "2.0.0"
+    version: "2.1.0"
   path:
     dependency: transitive
     description:

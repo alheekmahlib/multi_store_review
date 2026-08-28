@@ -23,9 +23,38 @@ public class MultiStoreReviewPlugin: NSObject, FlutterPlugin {
         case "openStoreListing":
             let args = call.arguments as? [String: Any]
             openStoreListing(storeId: args?["appStoreId"] as? String, result: result)
+        case "readReviewGateState":
+            result(readGateState())
+        case "writeReviewGateState":
+            writeGateState(call.arguments as? [String: Any])
+            result(nil)
         default:
             result(FlutterMethodNotImplemented)
         }
+    }
+
+    // Review gate state (built-in storage via UserDefaults)
+
+    private var gateDefaults: UserDefaults { UserDefaults.standard }
+
+    private func readGateState() -> [String: Int64] {
+        func value(_ key: String) -> Int64 {
+            (gateDefaults.object(forKey: key) as? NSNumber)?.int64Value ?? 0
+        }
+        return [
+            "launches": value("multi_store_review.launches"),
+            "firstLaunchAt": value("multi_store_review.firstLaunchAt"),
+            "lastPromptAt": value("multi_store_review.lastPromptAt"),
+        ]
+    }
+
+    private func writeGateState(_ state: [String: Any]?) {
+        func value(_ key: String) -> Int64 {
+            (state?[key] as? NSNumber)?.int64Value ?? 0
+        }
+        gateDefaults.set(value("launches"), forKey: "multi_store_review.launches")
+        gateDefaults.set(value("firstLaunchAt"), forKey: "multi_store_review.firstLaunchAt")
+        gateDefaults.set(value("lastPromptAt"), forKey: "multi_store_review.lastPromptAt")
     }
 
     private func requestReview(store: String?, result: @escaping FlutterResult) {

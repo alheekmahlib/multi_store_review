@@ -1,3 +1,11 @@
+# 2.1.0
+
+- Additive: `readReviewGateState()` / `writeReviewGateState(...)` platform
+  methods and the `ReviewGateState` value they exchange, used by the
+  app-facing automatic review gate. Best-effort contract: reads return an
+  empty state when nothing was persisted; writes of the empty state clear
+  it.
+
 # 2.0.0
 
 Breaking change, reworked together with the app-facing `multi_store_review`

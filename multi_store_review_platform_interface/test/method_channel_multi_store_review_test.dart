@@ -27,6 +27,12 @@ void main() {
       'detectStore': (_) async => 'huaweiAppGallery',
       'requestReview': (_) async => 'huaweiAppGallery',
       'openStoreListing': (_) async => null,
+      'readReviewGateState': (_) async => <String, Object>{
+            'launches': 7,
+            'firstLaunchAt': 1234567890123,
+            'lastPromptAt': 0,
+          },
+      'writeReviewGateState': (_) async => null,
     };
     plugin = MethodChannelMultiStoreReview(
       channel: channel,
@@ -283,6 +289,77 @@ void main() {
       await expectLater(
         plugin.openStoreListing(const StoreListing()),
         throwsUnsupportedError,
+      );
+    });
+  });
+
+  group('review gate state', () {
+    test('reads and parses the persisted state', () async {
+      final state = await plugin.readReviewGateState();
+
+      expect(log, <Matcher>[
+        isMethodCall('readReviewGateState', arguments: null),
+      ]);
+      expect(
+        state,
+        const ReviewGateState(
+          launches: 7,
+          firstLaunchAt: 1234567890123,
+          lastPromptAt: 0,
+        ),
+      );
+    });
+
+    test('sends the state as a map when writing', () async {
+      await plugin.writeReviewGateState(
+        const ReviewGateState(launches: 2, firstLaunchAt: 42),
+      );
+
+      expect(log, <Matcher>[
+        isMethodCall(
+          'writeReviewGateState',
+          arguments: {
+            'launches': 2,
+            'firstLaunchAt': 42,
+            'lastPromptAt': 0,
+          },
+        ),
+      ]);
+    });
+
+    test('returns an empty state on unsupported platforms', () async {
+      plugin = MethodChannelMultiStoreReview(
+        channel: channel,
+        platform: FakePlatform(operatingSystem: 'linux'),
+      );
+
+      expect(await plugin.readReviewGateState(), ReviewGateState.empty);
+      expect(log, isEmpty);
+    });
+
+    test('ignores writes on unsupported platforms', () async {
+      plugin = MethodChannelMultiStoreReview(
+        channel: channel,
+        platform: FakePlatform(operatingSystem: 'linux'),
+      );
+
+      await plugin.writeReviewGateState(const ReviewGateState(launches: 9));
+
+      expect(log, isEmpty);
+    });
+
+    test('fromMap tolerates null, non-map and partial values', () {
+      expect(ReviewGateState.fromMap(null), ReviewGateState.empty);
+      expect(ReviewGateState.fromMap(42), ReviewGateState.empty);
+      expect(
+        ReviewGateState.fromMap(<String, Object>{'launches': 3}),
+        const ReviewGateState(launches: 3),
+      );
+      expect(
+        ReviewGateState.fromMap(<String, Object>{
+          'firstLaunchAt': 'not-a-number',
+        }),
+        ReviewGateState.empty,
       );
     });
   });

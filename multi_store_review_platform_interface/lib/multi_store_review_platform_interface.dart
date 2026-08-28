@@ -1,10 +1,12 @@
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 
 import 'method_channel_multi_store_review.dart';
+import 'review_gate_state.dart';
 import 'review_store.dart';
 import 'store_listing.dart';
 
 export 'error_codes.dart';
+export 'review_gate_state.dart';
 export 'review_store.dart';
 export 'store_listing.dart';
 
@@ -99,5 +101,25 @@ abstract class MultiStoreReviewPlatform extends PlatformInterface {
   /// may throw a [PlatformException] when the platform call itself fails.
   Future<void> openStoreListing(StoreListing listing) {
     throw UnimplementedError('openStoreListing() has not been implemented.');
+  }
+
+  /// Reads the persisted [ReviewGateState] of the built-in review gate.
+  ///
+  /// Returns [ReviewGateState.empty] when nothing was persisted yet.
+  /// Implementations must be best-effort: a read failure should surface as
+  /// an empty state, not an error.
+  Future<ReviewGateState> readReviewGateState() {
+    throw UnimplementedError(
+      'readReviewGateState() has not been implemented.',
+    );
+  }
+
+  /// Persists the [ReviewGateState] of the built-in review gate.
+  ///
+  /// Writing [ReviewGateState.empty] clears the persisted state.
+  Future<void> writeReviewGateState(ReviewGateState state) {
+    throw UnimplementedError(
+      'writeReviewGateState() has not been implemented.',
+    );
   }
 }
